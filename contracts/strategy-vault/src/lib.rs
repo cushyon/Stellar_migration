@@ -1,0 +1,462 @@
+#![no_std]
+
+mod errors;
+mod oracle;
+mod storage;
+mod strategy;
+mod vault;
+
+#[cfg(test)]
+mod test;
+
+use errors::VaultError;
+use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
+use storage::StrategyConfig;
+
+// Re-export for tests
+pub use errors::VaultError as VaultErr;
+
+#[contract]
+pub struct StrategyVaultContract;
+
+// ===========================================================================
+// Public interface
+// ===========================================================================
+
+#[contractimpl]
+impl StrategyVaultContract {
+    // -----------------------------------------------------------------------
+    // Initialization
+    // -----------------------------------------------------------------------
+
+    pub fn initialize(
+        e: Env,
+        admin: Address,
+        asset: Address,
+        operator: Address,
+        name: String,
+        symbol: String,
+        decimals: u32,
+        config: StrategyConfig,
+    ) -> Result<(), VaultError> {
+        if storage::is_initialized(&e) {
+            return Err(VaultError::AlreadyInitialized);
+        }
+
+        storage::set_admin(&e, &admin);
+        storage::set_asset(&e, &asset);
+        storage::set_operator(&e, &operator);
+        storage::set_name(&e, &name);
+        storage::set_symbol(&e, &symbol);
+        storage::set_decimals(&e, decimals);
+        storage::set_config(&e, &config);
+        storage::set_total_shares(&e, 0);
+
+        storage::bump_instance(&e);
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // SEP-41 Token Interface (vault shares)
+    // -----------------------------------------------------------------------
+
+    pub fn balance(e: Env, id: Address) -> i128 {
+        storage::bump_instance(&e);
+        storage::get_balance(&e, &id)
+    }
+
+    pub fn total_supply(e: Env) -> i128 {
+        storage::bump_instance(&e);
+        storage::get_total_shares(&e)
+    }
+
+    pub fn name(e: Env) -> String {
+        storage::bump_instance(&e);
+        storage::get_name(&e)
+    }
+
+    pub fn symbol(e: Env) -> String {
+        storage::bump_instance(&e);
+        storage::get_symbol(&e)
+    }
+
+    pub fn decimals(e: Env) -> u32 {
+        storage::bump_instance(&e);
+        storage::get_decimals(&e)
+    }
+
+    pub fn transfer(e: Env, from: Address, to: Address, amount: i128) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        from.require_auth();
+
+        if amount < 0 {
+            return Err(VaultError::InvalidDepositAmount);
+        }
+
+        let from_balance = storage::get_balance(&e, &from);
+        if from_balance < amount {
+            return Err(VaultError::InsufficientBalance);
+        }
+
+        storage::set_balance(&e, &from, from_balance - amount);
+        let to_balance = storage::get_balance(&e, &to);
+        storage::set_balance(&e, &to, to_balance + amount);
+
+        Ok(())
+    }
+
+    pub fn approve(
+        e: Env,
+        from: Address,
+        spender: Address,
+        amount: i128,
+        expiration_ledger: u32,
+    ) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        from.require_auth();
+
+        storage::set_allowance(&e, &from, &spender, amount, expiration_ledger);
+        Ok(())
+    }
+
+    pub fn allowance(e: Env, from: Address, spender: Address) -> i128 {
+        storage::bump_instance(&e);
+        storage::get_allowance(&e, &from, &spender).amount
+    }
+
+    pub fn transfer_from(
+        e: Env,
+        spender: Address,
+        from: Address,
+        to: Address,
+        amount: i128,
+    ) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        spender.require_auth();
+
+        let allowance_data = storage::get_allowance(&e, &from, &spender);
+        if allowance_data.amount < amount {
+            return Err(VaultError::InsufficientAllowance);
+        }
+
+        let from_balance = storage::get_balance(&e, &from);
+        if from_balance < amount {
+            return Err(VaultError::InsufficientBalance);
+        }
+
+        storage::set_balance(&e, &from, from_balance - amount);
+        let to_balance = storage::get_balance(&e, &to);
+        storage::set_balance(&e, &to, to_balance + amount);
+
+        storage::set_allowance(
+            &e,
+            &from,
+            &spender,
+            allowance_data.amount - amount,
+            allowance_data.expiration_ledger,
+        );
+
+        Ok(())
+    }
+
+    pub fn burn(e: Env, from: Address, amount: i128) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        from.require_auth();
+        vault::burn_shares(&e, &from, amount)
+    }
+
+    pub fn burn_from(
+        e: Env,
+        spender: Address,
+        from: Address,
+        amount: i128,
+    ) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        spender.require_auth();
+
+        let allowance_data = storage::get_allowance(&e, &from, &spender);
+        if allowance_data.amount < amount {
+            return Err(VaultError::InsufficientAllowance);
+        }
+
+        vault::burn_shares(&e, &from, amount)?;
+
+        storage::set_allowance(
+            &e,
+            &from,
+            &spender,
+            allowance_data.amount - amount,
+            allowance_data.expiration_ledger,
+        );
+
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // SEP-56 Vault Interface
+    // -----------------------------------------------------------------------
+
+    /// Returns the underlying asset address.
+    pub fn asset(e: Env) -> Address {
+        storage::bump_instance(&e);
+        storage::get_asset(&e)
+    }
+
+    /// Returns total assets held by the vault (real token balance).
+    pub fn total_assets(e: Env) -> i128 {
+        storage::bump_instance(&e);
+        vault::total_assets(&e)
+    }
+
+    /// Convert assets to shares (round down).
+    pub fn convert_to_shares(e: Env, assets: i128) -> i128 {
+        storage::bump_instance(&e);
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        vault::assets_to_shares(ta, ts, assets)
+    }
+
+    /// Convert shares to assets (round down).
+    pub fn convert_to_assets(e: Env, shares: i128) -> i128 {
+        storage::bump_instance(&e);
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        vault::shares_to_assets(ta, ts, shares)
+    }
+
+    pub fn max_deposit(_e: Env, _receiver: Address) -> i128 {
+        i128::MAX
+    }
+
+    pub fn max_mint(_e: Env, _receiver: Address) -> i128 {
+        i128::MAX
+    }
+
+    pub fn max_withdraw(e: Env, owner: Address) -> i128 {
+        storage::bump_instance(&e);
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        let shares = storage::get_balance(&e, &owner);
+        vault::shares_to_assets(ta, ts, shares)
+    }
+
+    pub fn max_redeem(e: Env, owner: Address) -> i128 {
+        storage::bump_instance(&e);
+        storage::get_balance(&e, &owner)
+    }
+
+    /// Preview how many shares a deposit of `assets` would yield (round down).
+    pub fn preview_deposit(e: Env, assets: i128) -> i128 {
+        storage::bump_instance(&e);
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        vault::assets_to_shares(ta, ts, assets)
+    }
+
+    /// Preview how many shares are needed to withdraw `assets` (round up).
+    pub fn preview_withdraw(e: Env, assets: i128) -> i128 {
+        storage::bump_instance(&e);
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        vault::assets_to_shares_round_up(ta, ts, assets)
+    }
+
+    /// Preview how many assets redeeming `shares` would yield (round down).
+    pub fn preview_redeem(e: Env, shares: i128) -> i128 {
+        storage::bump_instance(&e);
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        vault::shares_to_assets(ta, ts, shares)
+    }
+
+    /// Preview how many assets are needed to mint `shares` (round up).
+    pub fn preview_mint(e: Env, shares: i128) -> i128 {
+        storage::bump_instance(&e);
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        vault::shares_to_assets_round_up(ta, ts, shares)
+    }
+
+    /// Deposit `assets` of the underlying token, mint shares to `receiver`.
+    pub fn deposit(
+        e: Env,
+        from: Address,
+        assets: i128,
+        receiver: Address,
+    ) -> Result<i128, VaultError> {
+        storage::bump_instance(&e);
+        from.require_auth();
+
+        if assets <= 0 {
+            return Err(VaultError::InvalidDepositAmount);
+        }
+
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        let shares = vault::assets_to_shares(ta, ts, assets);
+
+        if shares <= 0 {
+            return Err(VaultError::InvalidDepositAmount);
+        }
+
+        vault::transfer_asset_in(&e, &from, assets);
+        vault::mint_shares(&e, &receiver, shares)?;
+
+        Ok(shares)
+    }
+
+    /// Withdraw exactly `assets` of underlying token, burning shares from `owner`.
+    /// Anyone can call this — User Exit Guarantee.
+    pub fn withdraw(
+        e: Env,
+        owner: Address,
+        assets: i128,
+        receiver: Address,
+    ) -> Result<i128, VaultError> {
+        storage::bump_instance(&e);
+        owner.require_auth();
+
+        if assets <= 0 {
+            return Err(VaultError::InvalidWithdrawAmount);
+        }
+
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        let shares_needed = vault::assets_to_shares_round_up(ta, ts, assets);
+
+        vault::burn_shares(&e, &owner, shares_needed)?;
+        vault::transfer_asset_out(&e, &receiver, assets);
+
+        Ok(shares_needed)
+    }
+
+    /// Redeem exactly `shares`, sending the corresponding assets to `receiver`.
+    pub fn redeem(
+        e: Env,
+        owner: Address,
+        shares: i128,
+        receiver: Address,
+    ) -> Result<i128, VaultError> {
+        storage::bump_instance(&e);
+        owner.require_auth();
+
+        if shares <= 0 {
+            return Err(VaultError::InvalidRedeemAmount);
+        }
+
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        let assets = vault::shares_to_assets(ta, ts, shares);
+
+        if assets <= 0 {
+            return Err(VaultError::InvalidRedeemAmount);
+        }
+
+        vault::burn_shares(&e, &owner, shares)?;
+        vault::transfer_asset_out(&e, &receiver, assets);
+
+        Ok(assets)
+    }
+
+    /// Mint exactly `shares` to `receiver`, pulling the required assets from `from`.
+    pub fn mint(
+        e: Env,
+        from: Address,
+        shares: i128,
+        receiver: Address,
+    ) -> Result<i128, VaultError> {
+        storage::bump_instance(&e);
+        from.require_auth();
+
+        if shares <= 0 {
+            return Err(VaultError::InvalidMintAmount);
+        }
+
+        let ta = vault::total_assets(&e);
+        let ts = storage::get_total_shares(&e);
+        let assets_needed = vault::shares_to_assets_round_up(ta, ts, shares);
+
+        if assets_needed <= 0 {
+            return Err(VaultError::InvalidMintAmount);
+        }
+
+        vault::transfer_asset_in(&e, &from, assets_needed);
+        vault::mint_shares(&e, &receiver, shares)?;
+
+        Ok(assets_needed)
+    }
+
+    // -----------------------------------------------------------------------
+    // Strategy execution
+    // -----------------------------------------------------------------------
+
+    pub fn execute_strategy(
+        e: Env,
+        operator: Address,
+        router: Address,
+        token_in: Address,
+        token_out: Address,
+        amount_in: i128,
+        min_amount_out: i128,
+        path: Vec<Address>,
+    ) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        strategy::execute(
+            &e,
+            operator,
+            router,
+            token_in,
+            token_out,
+            amount_in,
+            min_amount_out,
+            path,
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Admin
+    // -----------------------------------------------------------------------
+
+    pub fn set_operator(e: Env, new_operator: Address) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        let admin = storage::get_admin(&e);
+        admin.require_auth();
+        storage::set_operator(&e, &new_operator);
+        Ok(())
+    }
+
+    pub fn set_config(e: Env, config: StrategyConfig) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        let admin = storage::get_admin(&e);
+        admin.require_auth();
+        storage::set_config(&e, &config);
+        Ok(())
+    }
+
+    pub fn set_admin(e: Env, new_admin: Address) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        let admin = storage::get_admin(&e);
+        admin.require_auth();
+        storage::set_admin(&e, &new_admin);
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Query
+    // -----------------------------------------------------------------------
+
+    pub fn get_config(e: Env) -> StrategyConfig {
+        storage::bump_instance(&e);
+        storage::get_config(&e)
+    }
+
+    pub fn get_operator(e: Env) -> Address {
+        storage::bump_instance(&e);
+        storage::get_operator(&e)
+    }
+
+    pub fn get_admin(e: Env) -> Address {
+        storage::bump_instance(&e);
+        storage::get_admin(&e)
+    }
+}

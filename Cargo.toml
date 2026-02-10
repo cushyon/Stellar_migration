@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["contracts/strategy-vault"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = "symbols"
+panic = "abort"
