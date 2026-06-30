@@ -13,14 +13,23 @@ pub enum VaultError {
     InsufficientAllowance = 15,
     InsufficientBalance = 16,
 
-    // Strategy safety (20-24)
+    // Strategy safety (20-28)
     UnauthorizedOperator = 20,
     TokenNotAllowed = 21,
     TradeSizeExceeded = 22,
     CooldownNotElapsed = 23,
     SlippageExceeded = 24,
+    UnauthorizedGuardian = 25,
+    NonceMismatch = 26,
+    DeadlineExpired = 27,
+    FloorBreached = 28,
 
     // Math / system (30-31)
     MathOverflow = 30,
     AlreadyInitialized = 31,
+
+    // Oracle / circuit breaker (40-42)
+    OracleStale = 40,
+    OracleDeviation = 41,
+    PriceUnavailable = 42,
 }

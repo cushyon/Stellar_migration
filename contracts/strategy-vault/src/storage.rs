@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Env, String, Vec};
+use soroban_sdk::{contracttype, Address, Env, Map, String, Symbol, Vec};
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -11,9 +11,11 @@ pub enum DataKey {
     Admin,
     Asset,
     Operator,
+    Guardian,
     Config,
     TotalShares,
     LastTradeTime,
+    Nonce,
     Name,
     Symbol,
     Decimals,
@@ -30,9 +32,52 @@ pub enum DataKey {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
 pub struct StrategyConfig {
+    /// Max `amount_in` per strategy trade, in base units.
     pub max_trade_size: i128,
+    /// Minimum seconds between strategy trades.
     pub cooldown_period: u64,
+    /// Swap allowlist — both `token_in` and `token_out` must be present.
     pub allowed_tokens: Vec<Address>,
+
+    // --- Floor (Decision 3) -----------------------------------------------
+    /// Minimum base-asset allocation, in bps of NAV (0..=10_000). A strategy
+    /// trade that would push the base allocation below this reverts.
+    /// PARAM: set with Wajih — do not default.
+    pub floor_bps: u32,
+
+    // --- Oracle / circuit breaker (Decision 4) ----------------------------
+    /// Reflector (SEP-40) oracle contract id, used for NAV pricing and the
+    /// `min_amount_out` / floor checks. The vault never accepts an
+    /// executor-supplied price.
+    pub reflector_id: Address,
+    /// Maps each token address (base + risky) to its Reflector ticker symbol.
+    /// Reflector's CEX/DEX feed is keyed by symbol (e.g. "XLM", "USDC"), so the
+    /// vault needs this to price the tokens it holds by address.
+    pub asset_symbols: Map<Address, Symbol>,
+    /// Max |lastprice − twap| / twap before execution halts, in bps.
+    /// PARAM: set with Wajih — do not default.
+    pub deviation_bps: u32,
+    /// Max price age (seconds) before a quote is rejected as stale.
+    /// PARAM: set with Wajih — do not default.
+    pub staleness: u64,
+
+    // --- Inflation protection (Decision 2) --------------------------------
+    /// Virtual-share offset exponent: the share-supply term in the conversion
+    /// math is `total_supply + 10^decimals_offset` (the asset term is `+1`),
+    /// per OZ ERC-4626. Hardening over the weakest setting (0).
+    /// PARAM: set with Wajih — do not default.
+    pub decimals_offset: u32,
+
+    // --- Fee scaffolding (Decision 6) -------------------------------------
+    // INERT in Tranche 1: stored and documented as a deliberate zero-fee MVP,
+    // but never applied to any deposit/withdraw/strategy math. Active fee
+    // accrual (management + performance) lands in Tranche 3 (D9). Surfaced
+    // here so the storage layout is forward-compatible and "zero fees" is an
+    // explicit, on-chain choice rather than a silent omission.
+    /// Management fee, bps/year. Reserved; must be 0 for Tranche 1.
+    pub mgmt_fee_bps: u32,
+    /// Performance fee, bps of profit. Reserved; must be 0 for Tranche 1.
+    pub perf_fee_bps: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -95,6 +140,14 @@ pub fn set_operator(e: &Env, operator: &Address) {
     e.storage().instance().set(&DataKey::Operator, operator);
 }
 
+pub fn get_guardian(e: &Env) -> Address {
+    e.storage().instance().get(&DataKey::Guardian).unwrap()
+}
+
+pub fn set_guardian(e: &Env, guardian: &Address) {
+    e.storage().instance().set(&DataKey::Guardian, guardian);
+}
+
 pub fn get_config(e: &Env) -> StrategyConfig {
     e.storage().instance().get(&DataKey::Config).unwrap()
 }
@@ -125,6 +178,15 @@ pub fn set_last_trade_time(e: &Env, time: u64) {
     e.storage()
         .instance()
         .set(&DataKey::LastTradeTime, &time);
+}
+
+/// Strict, monotonic nonce for `execute_strategy` replay protection.
+pub fn get_nonce(e: &Env) -> u64 {
+    e.storage().instance().get(&DataKey::Nonce).unwrap_or(0)
+}
+
+pub fn set_nonce(e: &Env, nonce: u64) {
+    e.storage().instance().set(&DataKey::Nonce, &nonce);
 }
 
 pub fn get_name(e: &Env) -> String {

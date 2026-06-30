@@ -1,6 +1,7 @@
 #![no_std]
 
 mod errors;
+mod events;
 mod oracle;
 mod storage;
 mod strategy;
@@ -11,6 +12,7 @@ mod test;
 
 use errors::VaultError;
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
+use stellar_contract_utils::pausable;
 use storage::StrategyConfig;
 
 // Re-export for tests
@@ -18,6 +20,16 @@ pub use errors::VaultError as VaultErr;
 
 #[contract]
 pub struct StrategyVaultContract;
+
+/// Authorize an emergency pause/unpause caller: the dedicated guardian or the
+/// admin. Caller `require_auth` is asserted by the entrypoint before this check.
+fn require_guardian_or_admin(e: &Env, caller: &Address) -> Result<(), VaultError> {
+    if *caller == storage::get_guardian(e) || *caller == storage::get_admin(e) {
+        Ok(())
+    } else {
+        Err(VaultError::UnauthorizedGuardian)
+    }
+}
 
 // ===========================================================================
 // Public interface
@@ -29,6 +41,7 @@ impl StrategyVaultContract {
     // Initialization
     // -----------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub fn initialize(
         e: Env,
         admin: Address,
@@ -46,6 +59,9 @@ impl StrategyVaultContract {
         storage::set_admin(&e, &admin);
         storage::set_asset(&e, &asset);
         storage::set_operator(&e, &operator);
+        // Guardian (emergency pause authority) defaults to admin; admin can
+        // delegate it to a dedicated guardian via `set_guardian`.
+        storage::set_guardian(&e, &admin);
         storage::set_name(&e, &name);
         storage::set_symbol(&e, &symbol);
         storage::set_decimals(&e, decimals);
@@ -102,6 +118,7 @@ impl StrategyVaultContract {
         let to_balance = storage::get_balance(&e, &to);
         storage::set_balance(&e, &to, to_balance + amount);
 
+        events::transfer(&e, &from, &to, amount);
         Ok(())
     }
 
@@ -116,6 +133,7 @@ impl StrategyVaultContract {
         from.require_auth();
 
         storage::set_allowance(&e, &from, &spender, amount, expiration_ledger);
+        events::approve(&e, &from, &spender, amount, expiration_ledger);
         Ok(())
     }
 
@@ -156,13 +174,16 @@ impl StrategyVaultContract {
             allowance_data.expiration_ledger,
         );
 
+        events::transfer(&e, &from, &to, amount);
         Ok(())
     }
 
     pub fn burn(e: Env, from: Address, amount: i128) -> Result<(), VaultError> {
         storage::bump_instance(&e);
         from.require_auth();
-        vault::burn_shares(&e, &from, amount)
+        vault::burn_shares(&e, &from, amount)?;
+        events::burn(&e, &from, amount);
+        Ok(())
     }
 
     pub fn burn_from(
@@ -189,6 +210,7 @@ impl StrategyVaultContract {
             allowance_data.expiration_ledger,
         );
 
+        events::burn(&e, &from, amount);
         Ok(())
     }
 
@@ -213,7 +235,7 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        vault::assets_to_shares(ta, ts, assets)
+        vault::assets_to_shares(&e, ta, ts, assets)
     }
 
     /// Convert shares to assets (round down).
@@ -221,7 +243,7 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        vault::shares_to_assets(ta, ts, shares)
+        vault::shares_to_assets(&e, ta, ts, shares)
     }
 
     pub fn max_deposit(_e: Env, _receiver: Address) -> i128 {
@@ -237,7 +259,7 @@ impl StrategyVaultContract {
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
         let shares = storage::get_balance(&e, &owner);
-        vault::shares_to_assets(ta, ts, shares)
+        vault::shares_to_assets(&e, ta, ts, shares)
     }
 
     pub fn max_redeem(e: Env, owner: Address) -> i128 {
@@ -250,7 +272,7 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        vault::assets_to_shares(ta, ts, assets)
+        vault::assets_to_shares(&e, ta, ts, assets)
     }
 
     /// Preview how many shares are needed to withdraw `assets` (round up).
@@ -258,7 +280,7 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        vault::assets_to_shares_round_up(ta, ts, assets)
+        vault::assets_to_shares_round_up(&e, ta, ts, assets)
     }
 
     /// Preview how many assets redeeming `shares` would yield (round down).
@@ -266,7 +288,7 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        vault::shares_to_assets(ta, ts, shares)
+        vault::shares_to_assets(&e, ta, ts, shares)
     }
 
     /// Preview how many assets are needed to mint `shares` (round up).
@@ -274,7 +296,7 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        vault::shares_to_assets_round_up(ta, ts, shares)
+        vault::shares_to_assets_round_up(&e, ta, ts, shares)
     }
 
     /// Deposit `assets` of the underlying token, mint shares to `receiver`.
@@ -285,6 +307,7 @@ impl StrategyVaultContract {
         receiver: Address,
     ) -> Result<i128, VaultError> {
         storage::bump_instance(&e);
+        pausable::when_not_paused(&e);
         from.require_auth();
 
         if assets <= 0 {
@@ -293,7 +316,7 @@ impl StrategyVaultContract {
 
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        let shares = vault::assets_to_shares(ta, ts, assets);
+        let shares = vault::assets_to_shares(&e, ta, ts, assets);
 
         if shares <= 0 {
             return Err(VaultError::InvalidDepositAmount);
@@ -302,6 +325,7 @@ impl StrategyVaultContract {
         vault::transfer_asset_in(&e, &from, assets);
         vault::mint_shares(&e, &receiver, shares)?;
 
+        events::deposit(&e, &from, &receiver, assets, shares);
         Ok(shares)
     }
 
@@ -322,11 +346,12 @@ impl StrategyVaultContract {
 
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        let shares_needed = vault::assets_to_shares_round_up(ta, ts, assets);
+        let shares_needed = vault::assets_to_shares_round_up(&e, ta, ts, assets);
 
         vault::burn_shares(&e, &owner, shares_needed)?;
         vault::transfer_asset_out(&e, &receiver, assets);
 
+        events::withdraw(&e, &owner, &receiver, assets, shares_needed);
         Ok(shares_needed)
     }
 
@@ -346,7 +371,7 @@ impl StrategyVaultContract {
 
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        let assets = vault::shares_to_assets(ta, ts, shares);
+        let assets = vault::shares_to_assets(&e, ta, ts, shares);
 
         if assets <= 0 {
             return Err(VaultError::InvalidRedeemAmount);
@@ -355,6 +380,7 @@ impl StrategyVaultContract {
         vault::burn_shares(&e, &owner, shares)?;
         vault::transfer_asset_out(&e, &receiver, assets);
 
+        events::withdraw(&e, &owner, &receiver, assets, shares);
         Ok(assets)
     }
 
@@ -366,6 +392,7 @@ impl StrategyVaultContract {
         receiver: Address,
     ) -> Result<i128, VaultError> {
         storage::bump_instance(&e);
+        pausable::when_not_paused(&e);
         from.require_auth();
 
         if shares <= 0 {
@@ -374,7 +401,7 @@ impl StrategyVaultContract {
 
         let ta = vault::total_assets(&e);
         let ts = storage::get_total_shares(&e);
-        let assets_needed = vault::shares_to_assets_round_up(ta, ts, shares);
+        let assets_needed = vault::shares_to_assets_round_up(&e, ta, ts, shares);
 
         if assets_needed <= 0 {
             return Err(VaultError::InvalidMintAmount);
@@ -383,6 +410,7 @@ impl StrategyVaultContract {
         vault::transfer_asset_in(&e, &from, assets_needed);
         vault::mint_shares(&e, &receiver, shares)?;
 
+        events::deposit(&e, &from, &receiver, assets_needed, shares);
         Ok(assets_needed)
     }
 
@@ -390,6 +418,11 @@ impl StrategyVaultContract {
     // Strategy execution
     // -----------------------------------------------------------------------
 
+    /// Execute a strategy trade. `nonce` must equal the vault's current nonce
+    /// (replay protection); `deadline` is a ledger timestamp past which the
+    /// trade is rejected. Frozen signature — the offchain orchestrator builds
+    /// transactions against it.
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_strategy(
         e: Env,
         operator: Address,
@@ -398,9 +431,12 @@ impl StrategyVaultContract {
         token_out: Address,
         amount_in: i128,
         min_amount_out: i128,
+        nonce: u64,
+        deadline: u64,
         path: Vec<Address>,
     ) -> Result<(), VaultError> {
         storage::bump_instance(&e);
+        pausable::when_not_paused(&e);
         strategy::execute(
             &e,
             operator,
@@ -409,8 +445,58 @@ impl StrategyVaultContract {
             token_out,
             amount_in,
             min_amount_out,
+            nonce,
+            deadline,
             path,
         )
+    }
+
+    /// Current strategy nonce (next expected value for `execute_strategy`).
+    pub fn get_nonce(e: Env) -> u64 {
+        storage::bump_instance(&e);
+        storage::get_nonce(&e)
+    }
+
+    // -----------------------------------------------------------------------
+    // Emergency pause (OZ Pausable) + guardian role
+    // -----------------------------------------------------------------------
+
+    /// Guardian (or admin) halts deposits/mints/strategy. Withdraw & redeem
+    /// stay callable — the User Exit Guarantee survives a pause.
+    pub fn pause(e: Env, caller: Address) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        caller.require_auth();
+        require_guardian_or_admin(&e, &caller)?;
+        pausable::pause(&e); // emits `paused`; reverts (#1000) if already paused
+        Ok(())
+    }
+
+    /// Guardian (or admin) resumes normal operation.
+    pub fn unpause(e: Env, caller: Address) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        caller.require_auth();
+        require_guardian_or_admin(&e, &caller)?;
+        pausable::unpause(&e); // emits `unpaused`; reverts (#1001) if not paused
+        Ok(())
+    }
+
+    pub fn paused(e: Env) -> bool {
+        storage::bump_instance(&e);
+        pausable::paused(&e)
+    }
+
+    /// Admin delegates the pause authority to a dedicated guardian address.
+    pub fn set_guardian(e: Env, new_guardian: Address) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        let admin = storage::get_admin(&e);
+        admin.require_auth();
+        storage::set_guardian(&e, &new_guardian);
+        Ok(())
+    }
+
+    pub fn get_guardian(e: Env) -> Address {
+        storage::bump_instance(&e);
+        storage::get_guardian(&e)
     }
 
     // -----------------------------------------------------------------------
@@ -458,5 +544,13 @@ impl StrategyVaultContract {
     pub fn get_admin(e: Env) -> Address {
         storage::bump_instance(&e);
         storage::get_admin(&e)
+    }
+
+    /// Oracle-validated price of `asset` (in base units) via Reflector.
+    /// Reverts on a stale / deviating / unavailable price. Read-only view used
+    /// by NAV, the frontend, and the indexer.
+    pub fn safe_price(e: Env, asset: Address) -> Result<i128, VaultError> {
+        storage::bump_instance(&e);
+        oracle::get_safe_price(&e, &asset)
     }
 }
