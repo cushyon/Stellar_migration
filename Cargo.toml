@@ -7,3 +7,4 @@ opt-level = "z"
 lto = true
 strip = "symbols"
 panic = "abort"
+overflow-checks = true

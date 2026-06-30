@@ -7,8 +7,10 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-soroban-sdk = "21.7.4"
-soroban-token-sdk = "21.7.4"
+soroban-sdk = "26.1.0"
+stellar-access = "0.7.2"
+stellar-contract-utils = "0.7.2"
+stellar-macros = "0.7.2"
 
 [dev-dependencies]
-soroban-sdk = { version = "21.7.4", features = ["testutils"] }
+soroban-sdk = { version = "26.1.0", features = ["testutils"] }

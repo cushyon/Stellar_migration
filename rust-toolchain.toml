@@ -1,0 +1,5 @@
+[toolchain]
+# soroban-sdk 26.1.0 requires rustc >= 1.91; pinned for reproducible builds.
+channel = "1.96.1"
+targets = ["wasm32v1-none", "wasm32-unknown-unknown"]
+components = ["rustfmt", "clippy"]
