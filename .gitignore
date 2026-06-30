@@ -29,3 +29,6 @@ target/
 # Soroban
 *.wasm
 *.d
+
+# local build log (never commit)
+FORNADAR.md
