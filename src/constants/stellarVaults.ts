@@ -19,7 +19,7 @@ export type StellarVaultConfig = {
 const STELLAR_VAULT_1: StellarVaultConfig = {
   name: "XLM Capital Protected",
   vaultId: "test-vault-1",
-  // Testnet deployment (real Reflector oracle wired). See FORNADAR.md.
+  // Testnet deployment (real Reflector oracle wired).
   contractId: "CCIFWNFU3AJJOSECVZ6Z4SYSD6UXSIRXA72QTG724NP6WOG5RSJTP7SB",
   description:
     "60% capital guarantee and profit lock-in, invested in XLM with automated rebalancing on Stellar",
