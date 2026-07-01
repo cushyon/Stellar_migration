@@ -27,6 +27,31 @@ export interface UserPosition {
   updatedAt: string;
 }
 
+export interface VaultHistoryPoint {
+  ts: string;
+  ledger: number;
+  nav: string; // base units
+  totalShares: string;
+  sharePrice: number;
+  allocBase: string;
+  allocRisky: string;
+}
+
+export async function fetchVaultHistory(
+  contractId: string,
+  range: string
+): Promise<VaultHistoryPoint[]> {
+  try {
+    const res = await fetch(`${BASE}/vaults/${contractId}/history?range=${range}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    return (await res.json()) as VaultHistoryPoint[];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchVaultStats(contractId: string): Promise<VaultStats | null> {
   try {
     const res = await fetch(`${BASE}/vaults/${contractId}/stats`, { cache: "no-store" });

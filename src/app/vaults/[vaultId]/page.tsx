@@ -10,7 +10,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import useStellarWalletStore from "@/stores/useStellarWalletStore";
 import { useVaultStats, useUserPosition } from "@/hooks/useVaultData";
-import { formatAmount, formatPct } from "@/lib/format";
+import { formatAmount } from "@/lib/format";
+import { StellarVaultChart } from "@/components/StellarVaultChart";
 import type { VaultStats, UserPosition } from "@/services/indexer";
 
 type ContentTab = "VaultPerformance" | "UserPerformance";
@@ -73,28 +74,12 @@ function VaultPerformancePanel({
         <StatCard label="Rebalancing" value="1" suffix="Day" />
       </div>
 
-      {/* Performance breakdown */}
-      <div className="rounded border border-neutral-800 bg-neutral-900 p-4">
-        <h3 className="text-lg font-semibold mb-3">Performance Breakdown</h3>
-        <div className="grid grid-cols-3 gap-4 text-sm">
-          <div className="flex flex-col gap-1">
-            <span className="text-gray-400">7d</span>
-            <span className="text-green-400">—</span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-gray-400">30d</span>
-            <span className="text-green-400">
-              {stats ? formatPct(stats.performance["30d"]) : "—"}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-gray-400">All time</span>
-            <span className="text-green-400">
-              {stats ? formatPct(stats.performance["90d"]) : "—"}
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* Performance chart (the product) */}
+      <StellarVaultChart
+        contractId={config.contractId}
+        symbol={symbol}
+        decimals={decimals}
+      />
     </div>
   );
 }
