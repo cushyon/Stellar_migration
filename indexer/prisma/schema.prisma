@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// One row per onchain contract event. `id` is the event TOID — globally
+/// sortable and unique — so re-ingestion is idempotent (dedup key).
+model StellarEvent {
+  id         String   @id
+  ledger     Int
+  ts         DateTime
+  contractId String   @map("contract_id")
+  type       String // deposit | withdraw | transfer | approve | burn | strategy | paused | unpaused
+  topic      Json
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([contractId, ledger])
+  @@index([contractId, type, ledger])
+  @@map("stellar_event")
+}
+
+/// Periodic NAV/metrics snapshot for a vault — feeds TVL, allocation split,
+/// and historical performance. nav/shares stored as exact NUMERIC (i128-safe).
+model VaultSnapshot {
+  id          Int      @id @default(autoincrement())
+  contractId  String   @map("contract_id")
+  ts          DateTime @default(now())
+  ledger      Int
+  nav         Decimal  @db.Decimal(40, 0)
+  totalShares Decimal  @map("total_shares") @db.Decimal(40, 0)
+  sharePrice  Float    @map("share_price")
+  allocBase   Decimal  @map("alloc_base") @db.Decimal(40, 0)
+  allocRisky  Decimal  @map("alloc_risky") @db.Decimal(40, 0)
+
+  @@index([contractId, ts])
+  @@map("vault_snapshot")
+}
+
+/// Current share holding per (vault, address), derived from share-moving events.
+model UserPosition {
+  vault     String
+  address   String
+  shares    Decimal  @db.Decimal(40, 0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@id([vault, address])
+  @@map("user_position")
+}
+
+/// Single-row ingest cursor (last fully-ingested ledger) per contract.
+model IngestState {
+  contractId String @id @map("contract_id")
+  lastLedger Int    @map("last_ledger")
+}
