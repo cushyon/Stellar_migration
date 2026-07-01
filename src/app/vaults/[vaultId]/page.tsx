@@ -1,11 +1,17 @@
 "use client";
 
 import { use, useState } from "react";
-import { getStellarVaultConfig } from "@/constants/stellarVaults";
+import {
+  getStellarVaultConfig,
+  type StellarVaultConfig,
+} from "@/constants/stellarVaults";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import useStellarWalletStore from "@/stores/useStellarWalletStore";
+import { useVaultStats, useUserPosition } from "@/hooks/useVaultData";
+import { formatAmount, formatPct } from "@/lib/format";
+import type { VaultStats, UserPosition } from "@/services/indexer";
 
 type ContentTab = "VaultPerformance" | "UserPerformance";
 
@@ -38,32 +44,54 @@ function StatCard({
 }
 
 /* ── Vault Performance panel ── */
-function VaultPerformancePanel({ symbol }: { symbol: string }) {
+function VaultPerformancePanel({
+  config,
+  stats,
+}: {
+  config: StellarVaultConfig;
+  stats: VaultStats | null;
+}) {
+  const symbol = config.asset.symbol;
+  const decimals = config.asset.decimals;
+  const roi = stats?.performance.apy ?? stats?.performance["30d"] ?? null;
+
   return (
     <div className="flex flex-col w-full gap-6">
       {/* Stats row */}
       <div className="grid w-full grid-cols-2 gap-4 p-4 rounded sm:flex sm:gap-0 border border-neutral-800 bg-neutral-900">
-        <StatCard label="ROI" value="12.45" suffix="%" />
-        <StatCard label="TVL" value="1.2M" suffix={symbol} />
-        <StatCard label="Protection floor" value="60" suffix="%" />
+        <StatCard
+          label="ROI"
+          value={roi != null ? (roi * 100).toFixed(2) : "—"}
+          suffix="%"
+        />
+        <StatCard
+          label="TVL"
+          value={stats ? formatAmount(stats.tvl, decimals) : "—"}
+          suffix={symbol}
+        />
+        <StatCard label="Protection floor" value={`${config.floorBps / 100}`} suffix="%" />
         <StatCard label="Rebalancing" value="1" suffix="Day" />
       </div>
 
-      {/* Performance breakdown placeholder */}
+      {/* Performance breakdown */}
       <div className="rounded border border-neutral-800 bg-neutral-900 p-4">
         <h3 className="text-lg font-semibold mb-3">Performance Breakdown</h3>
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">7d</span>
-            <span className="text-green-400">+1.82%</span>
+            <span className="text-green-400">—</span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">30d</span>
-            <span className="text-green-400">+5.14%</span>
+            <span className="text-green-400">
+              {stats ? formatPct(stats.performance["30d"]) : "—"}
+            </span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">All time</span>
-            <span className="text-green-400">+12.45%</span>
+            <span className="text-green-400">
+              {stats ? formatPct(stats.performance["90d"]) : "—"}
+            </span>
           </div>
         </div>
       </div>
@@ -72,7 +100,24 @@ function VaultPerformancePanel({ symbol }: { symbol: string }) {
 }
 
 /* ── User Performance panel ── */
-function UserPerformancePanel({ symbol }: { symbol: string }) {
+function UserPerformancePanel({
+  config,
+  stats,
+  position,
+}: {
+  config: StellarVaultConfig;
+  stats: VaultStats | null;
+  position: UserPosition | null;
+}) {
+  const symbol = config.asset.symbol;
+  const decimals = config.asset.decimals;
+
+  // Current value = shares × share price (base units); cost basis isn't tracked
+  // onchain, so Deposited / P&L stay at the design's placeholder.
+  const shares = position ? BigInt(position.shares) : BigInt(0);
+  const currentValue =
+    stats && position ? (Number(shares) * stats.sharePrice) / 10 ** decimals : 0;
+
   return (
     <div className="flex flex-col w-full gap-6">
       <div className="rounded border border-neutral-800 bg-neutral-900 p-4">
@@ -84,7 +129,9 @@ function UserPerformancePanel({ symbol }: { symbol: string }) {
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">Current Value</span>
-            <span>0.00 {symbol}</span>
+            <span>
+              {currentValue.toFixed(2)} {symbol}
+            </span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">P&L</span>
@@ -212,6 +259,11 @@ export default function StellarVaultPage(props: {
   const params = use(props.params);
   const vaultConfig = getStellarVaultConfig(params.vaultId);
 
+  const address = useStellarWalletStore((s) => s.address);
+  // Hooks run unconditionally (before any early return) — fall back to "" id.
+  const { stats } = useVaultStats(vaultConfig?.contractId ?? "");
+  const position = useUserPosition(vaultConfig?.contractId ?? "", address);
+
   const [activeTab, setActiveTab] = useState<ContentTab>("VaultPerformance");
 
   if (!vaultConfig) {
@@ -250,10 +302,14 @@ export default function StellarVaultPage(props: {
       {/* Content + Form */}
       <div className="flex flex-col md:flex-row w-full gap-6 mt-4">
         {activeTab === "VaultPerformance" && (
-          <VaultPerformancePanel symbol={symbol} />
+          <VaultPerformancePanel config={vaultConfig} stats={stats} />
         )}
         {activeTab === "UserPerformance" && (
-          <UserPerformancePanel symbol={symbol} />
+          <UserPerformancePanel
+            config={vaultConfig}
+            stats={stats}
+            position={position}
+          />
         )}
 
         <div className="w-full md:max-w-[400px]">
