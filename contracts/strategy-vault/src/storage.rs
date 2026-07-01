@@ -16,6 +16,9 @@ pub enum DataKey {
     TotalShares,
     LastTradeTime,
     Nonce,
+    FeeRecipient,
+    LastFeeTime,
+    HighWaterMark,
     Name,
     Symbol,
     Decimals,
@@ -187,6 +190,38 @@ pub fn get_nonce(e: &Env) -> u64 {
 
 pub fn set_nonce(e: &Env, nonce: u64) {
     e.storage().instance().set(&DataKey::Nonce, &nonce);
+}
+
+// --- Fee accounting (mgmt + perf) ------------------------------------------
+
+pub fn get_fee_recipient(e: &Env) -> Address {
+    e.storage().instance().get(&DataKey::FeeRecipient).unwrap()
+}
+
+pub fn set_fee_recipient(e: &Env, recipient: &Address) {
+    e.storage().instance().set(&DataKey::FeeRecipient, recipient);
+}
+
+/// Timestamp of the last fee accrual (management fee prorates from here).
+pub fn get_last_fee_time(e: &Env) -> u64 {
+    e.storage().instance().get(&DataKey::LastFeeTime).unwrap_or(0)
+}
+
+pub fn set_last_fee_time(e: &Env, t: u64) {
+    e.storage().instance().set(&DataKey::LastFeeTime, &t);
+}
+
+/// High-water mark: the highest (scaled) share price at which a performance
+/// fee has been taken. Perf fees are only charged on gains above it.
+pub fn get_high_water_mark(e: &Env) -> i128 {
+    e.storage()
+        .instance()
+        .get(&DataKey::HighWaterMark)
+        .unwrap_or(0)
+}
+
+pub fn set_high_water_mark(e: &Env, hwm: i128) {
+    e.storage().instance().set(&DataKey::HighWaterMark, &hwm);
 }
 
 pub fn get_name(e: &Env) -> String {

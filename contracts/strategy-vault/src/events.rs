@@ -67,6 +67,17 @@ pub struct Burn {
     pub amount: i128,
 }
 
+/// `fees` — topics `[fees, recipient]`, data `[mgmt_fee, perf_fee, shares_minted]`.
+/// mgmt/perf are in base-asset units; shares are minted to the recipient.
+#[contractevent(data_format = "vec")]
+pub struct Fees {
+    #[topic]
+    pub recipient: Address,
+    pub mgmt_fee: i128,
+    pub perf_fee: i128,
+    pub shares_minted: i128,
+}
+
 /// `strategy` — topics `[strategy, operator]`,
 /// data `[nonce, token_in, token_out, amount_in, amount_out, nav_before, nav_after]`.
 #[contractevent(topics = ["strategy"], data_format = "vec")]
@@ -136,6 +147,16 @@ pub fn burn(e: &Env, from: &Address, amount: i128) {
     Burn {
         from: from.clone(),
         amount,
+    }
+    .publish(e);
+}
+
+pub fn fees(e: &Env, recipient: &Address, mgmt_fee: i128, perf_fee: i128, shares_minted: i128) {
+    Fees {
+        recipient: recipient.clone(),
+        mgmt_fee,
+        perf_fee,
+        shares_minted,
     }
     .publish(e);
 }

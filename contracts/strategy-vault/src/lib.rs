@@ -2,6 +2,7 @@
 
 mod errors;
 mod events;
+mod fees;
 mod oracle;
 mod storage;
 mod strategy;
@@ -62,6 +63,11 @@ impl StrategyVaultContract {
         // Guardian (emergency pause authority) defaults to admin; admin can
         // delegate it to a dedicated guardian via `set_guardian`.
         storage::set_guardian(&e, &admin);
+        // Fees: recipient defaults to admin; accrual starts now; the HWM is
+        // seeded to the baseline share price so deposits aren't treated as profit.
+        storage::set_fee_recipient(&e, &admin);
+        storage::set_last_fee_time(&e, e.ledger().timestamp());
+        storage::set_high_water_mark(&e, fees::baseline_share_price(config.decimals_offset));
         storage::set_name(&e, &name);
         storage::set_symbol(&e, &symbol);
         storage::set_decimals(&e, decimals);
@@ -552,5 +558,37 @@ impl StrategyVaultContract {
     pub fn safe_price(e: Env, asset: Address) -> Result<i128, VaultError> {
         storage::bump_instance(&e);
         oracle::get_safe_price(&e, &asset)
+    }
+
+    // -----------------------------------------------------------------------
+    // Fees (management + performance)
+    // -----------------------------------------------------------------------
+
+    /// Accrue management + performance fees and mint the corresponding shares
+    /// to the fee recipient. Permissionless. Returns `(mgmt_fee, perf_fee)` in
+    /// base-asset units.
+    pub fn collect_fees(e: Env) -> Result<(i128, i128), VaultError> {
+        storage::bump_instance(&e);
+        fees::collect(&e)
+    }
+
+    /// Admin sets the address that receives fee shares.
+    pub fn set_fee_recipient(e: Env, new_recipient: Address) -> Result<(), VaultError> {
+        storage::bump_instance(&e);
+        let admin = storage::get_admin(&e);
+        admin.require_auth();
+        storage::set_fee_recipient(&e, &new_recipient);
+        Ok(())
+    }
+
+    pub fn get_fee_recipient(e: Env) -> Address {
+        storage::bump_instance(&e);
+        storage::get_fee_recipient(&e)
+    }
+
+    /// Current performance-fee high-water mark (scaled share price).
+    pub fn get_high_water_mark(e: Env) -> i128 {
+        storage::bump_instance(&e);
+        storage::get_high_water_mark(&e)
     }
 }

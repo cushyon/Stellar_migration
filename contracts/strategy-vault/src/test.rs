@@ -250,6 +250,16 @@ fn make_config(
     }
 }
 
+/// Config with fees enabled (base-only allowlist, empty symbol map).
+fn fee_config(e: &Env, base: &Address, mgmt: u32, perf: u32) -> StrategyConfig {
+    let mut allowed = Vec::new(e);
+    allowed.push_back(base.clone());
+    let mut cfg = make_config(1_000_000_0000000, 60, allowed, Address::generate(e), Map::new(e));
+    cfg.mgmt_fee_bps = mgmt;
+    cfg.perf_fee_bps = perf;
+    cfg
+}
+
 // ===========================================================================
 // Initialization tests
 // ===========================================================================
@@ -900,6 +910,66 @@ fn test_preview_mint_rounds_up() {
 
     // preview_mint rounds UP (user pays more), preview_redeem rounds DOWN
     assert!(preview >= preview_redeem);
+}
+
+// ===========================================================================
+// Fee tests — management (1%/yr) + performance (20% over high-water mark).
+// Fees are paid as shares minted to the fee recipient.
+// ===========================================================================
+
+#[test]
+fn test_management_fee_accrues() {
+    setup!(e, token_addr, sac, tc, vault_addr, vault, admin, op, user);
+    // Enable 1% mgmt / 20% perf; route fees to a dedicated recipient.
+    vault.set_config(&fee_config(&e, &token_addr, 100, 2000));
+    let recipient = Address::generate(&e);
+    vault.set_fee_recipient(&recipient);
+
+    vault.deposit(&user, &1_000_0000000i128, &user); // NAV 1000; share price == HWM (no profit)
+    let supply_before = vault.total_supply();
+
+    // Advance exactly one year → management fee = 1% of NAV.
+    e.ledger().set_timestamp(31_536_000);
+    let (mgmt, perf) = vault.collect_fees();
+    assert_eq!(perf, 0, "no profit → no perf fee");
+    assert_eq!(mgmt, 10_0000000, "mgmt fee = 1% of 1000 = 10");
+
+    // ~1% of the pre-fee supply is minted to the recipient.
+    let recip = vault.balance(&recipient);
+    let expected = supply_before / 100;
+    assert!(recip > 0, "recipient must receive mgmt-fee shares");
+    let diff = (recip - expected).abs();
+    assert!(diff * 100 < expected, "mgmt fee ≈ 1% of supply (got {}, exp {})", recip, expected);
+}
+
+#[test]
+fn test_performance_fee_and_high_water_mark() {
+    setup!(e, token_addr, sac, tc, vault_addr, vault, admin, op, user);
+    vault.set_config(&fee_config(&e, &token_addr, 100, 2000));
+    let recipient = Address::generate(&e);
+    vault.set_fee_recipient(&recipient);
+
+    vault.deposit(&user, &1_000_0000000i128, &user); // NAV 1000; share price == HWM
+    let supply_before = vault.total_supply();
+
+    // Simulate +200 XLM yield by donating base directly to the vault (NAV → 1200).
+    // Time is not advanced, so the management fee is ~0 (isolates perf).
+    tc.transfer(&user, &vault_addr, &200_0000000i128);
+
+    let (mgmt, perf) = vault.collect_fees();
+    assert_eq!(mgmt, 0, "no time elapsed → no mgmt fee");
+    assert_eq!(perf, 40_0000000, "perf fee = 20% of 200 profit = 40");
+
+    // ~40 XLM worth of shares minted (≈ perf_fee * supply / NAV).
+    let recip1 = vault.balance(&recipient);
+    let expected1 = 40_0000000i128 * supply_before / 1_200_0000000i128;
+    assert!(recip1 > 0, "recipient must receive perf-fee shares");
+    let diff1 = (recip1 - expected1).abs();
+    assert!(diff1 * 50 < expected1, "perf fee ≈ 20% of profit (got {}, exp {})", recip1, expected1);
+
+    // HWM ratcheted up → a second collect with no new profit charges no perf fee.
+    let (_, perf2) = vault.collect_fees();
+    assert_eq!(perf2, 0, "HWM prevents charging the same gain twice");
 }
 
 // ===========================================================================
