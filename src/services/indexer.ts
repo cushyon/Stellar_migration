@@ -52,6 +52,21 @@ export async function fetchVaultHistory(
   }
 }
 
+export interface PricePoint {
+  ts: number; // unix seconds
+  price: number; // USD
+}
+
+export async function fetchPriceHistory(symbol: string, days: number): Promise<PricePoint[]> {
+  try {
+    const res = await fetch(`${BASE}/prices/${symbol}?days=${days}`, { cache: "no-store" });
+    if (!res.ok) return [];
+    return (await res.json()) as PricePoint[];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchVaultStats(contractId: string): Promise<VaultStats | null> {
   try {
     const res = await fetch(`${BASE}/vaults/${contractId}/stats`, { cache: "no-store" });

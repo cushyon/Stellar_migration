@@ -13,17 +13,22 @@ import {
   type TooltipProps,
 } from "recharts";
 import { getAreaStops, getYDomain, POSITIVE_GREEN, NEGATIVE_RED } from "@/lib/graph";
-import { useVaultHistory } from "@/hooks/useVaultData";
+import { useVaultHistory, usePriceHistory } from "@/hooks/useVaultData";
 
-type GraphType = "sharePrice" | "tvl" | "roi";
+type GraphType = "tvl" | "sharePrice" | "roi" | "xlmusd";
 type Period = "7d" | "30d" | "90d" | "all";
 
 const TYPES: { k: GraphType; label: string }[] = [
-  { k: "sharePrice", label: "Share price" },
   { k: "tvl", label: "TVL" },
+  { k: "sharePrice", label: "Share price" },
   { k: "roi", label: "ROI" },
+  { k: "xlmusd", label: "XLM/USD" },
 ];
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
+
+function periodDays(p: Period): number {
+  return p === "7d" ? 7 : p === "30d" ? 30 : p === "90d" ? 90 : 365;
+}
 
 const AREA_ID = "cushion-vault-area";
 const LINE_ID = "cushion-vault-line";
@@ -38,6 +43,7 @@ function millify(v: number): string {
 function fmtValue(type: GraphType, v: number): string {
   if (type === "roi") return `${v >= 0 ? "" : "-"}${Math.abs(v).toFixed(2)}%`;
   if (type === "sharePrice") return v.toFixed(4);
+  if (type === "xlmusd") return `$${v.toFixed(4)}`;
   return millify(v);
 }
 
@@ -50,19 +56,28 @@ export function StellarVaultChart({
   symbol: string;
   decimals: number;
 }) {
-  const [type, setType] = useState<GraphType>("sharePrice");
+  const [type, setType] = useState<GraphType>("tvl");
   const [period, setPeriod] = useState<Period>("30d");
   const history = useVaultHistory(contractId, period);
+  const prices = usePriceHistory("XLM", periodDays(period));
 
   const firstSharePrice = history.find((h) => h.sharePrice > 0)?.sharePrice ?? 0;
-  const data = history.map((h) => ({
-    ts: Math.floor(new Date(h.ts).getTime() / 1000),
-    sharePrice: h.sharePrice,
-    tvl: Number(BigInt(h.nav)) / 10 ** decimals,
-    roi: firstSharePrice > 0 ? (h.sharePrice / firstSharePrice - 1) * 100 : 0,
-  }));
+  const data =
+    type === "xlmusd"
+      ? prices.map((p) => ({ ts: p.ts, value: p.price }))
+      : history.map((h) => ({
+          ts: Math.floor(new Date(h.ts).getTime() / 1000),
+          value:
+            type === "tvl"
+              ? Number(BigInt(h.nav)) / 10 ** decimals
+              : type === "sharePrice"
+                ? h.sharePrice
+                : firstSharePrice > 0
+                  ? (h.sharePrice / firstSharePrice - 1) * 100
+                  : 0,
+        }));
 
-  const values = data.map((d) => d[type]);
+  const values = data.map((d) => d.value);
   const minY = values.length ? Math.min(...values) : 0;
   const maxY = values.length ? Math.max(...values) : 0;
   const yDomain = getYDomain(minY, maxY);
@@ -111,7 +126,7 @@ export function StellarVaultChart({
               </defs>
               <Area
                 type="monotone"
-                dataKey={type}
+                dataKey="value"
                 strokeWidth={2}
                 fill={`url(#${AREA_ID})`}
                 stroke={`url(#${LINE_ID})`}
@@ -125,7 +140,7 @@ export function StellarVaultChart({
                 tickFormatter={(t) => dayjs.unix(t).format("DD/MM")}
               />
               <YAxis
-                dataKey={type}
+                dataKey="value"
                 tickMargin={8}
                 width={52}
                 tickLine={false}

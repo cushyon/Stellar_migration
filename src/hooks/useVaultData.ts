@@ -5,9 +5,11 @@ import {
   fetchVaultStats,
   fetchUserPositions,
   fetchVaultHistory,
+  fetchPriceHistory,
   type VaultStats,
   type UserPosition,
   type VaultHistoryPoint,
+  type PricePoint,
 } from "@/services/indexer";
 
 const REFRESH_MS = 15_000;
@@ -54,6 +56,26 @@ export function useVaultHistory(contractId: string, range: string) {
   }, [contractId, range]);
 
   return history;
+}
+
+export function usePriceHistory(symbol: string, days: number) {
+  const [prices, setPrices] = useState<PricePoint[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const p = await fetchPriceHistory(symbol, days);
+      if (active) setPrices(p);
+    };
+    load();
+    const t = setInterval(load, REFRESH_MS);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [symbol, days]);
+
+  return prices;
 }
 
 export function useUserPosition(contractId: string, address: string | null) {
