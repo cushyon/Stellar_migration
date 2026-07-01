@@ -1,41 +1,18 @@
 import type { ReactNode } from "react";
 
-// Matches the vault graph palette (green above the 0 line, red below).
-export const POSITIVE_GREEN = "#4ade80";
-export const NEGATIVE_RED = "#f87171";
+// UIVaultCushion chart palette (its globals.css):
+//   --positive-green / --negative-red = hsl(55 89% 51%)  → a single gold, used
+//     for the line regardless of sign (no red/green split).
+//   --chart-area-neutral               = hsl(0 0% 0%)     → the area fill.
+export const LINE_COLOR = "hsl(55, 89%, 51%)";
+export const AREA_COLOR = "hsl(0, 0%, 0%)";
 
-/**
- * Gradient stops for the area/line: green above the x-axis (0), red below.
- * The color switches at the offset where the curve crosses zero.
- */
-export function getAreaStops(
-  min: number,
-  max: number,
-  { startOpacity = 1, endOpacity = 1 }: { startOpacity?: number; endOpacity?: number } = {}
-): ReactNode {
-  if (min >= 0) {
-    return (
-      <>
-        <stop offset="0%" stopColor={POSITIVE_GREEN} stopOpacity={startOpacity} />
-        <stop offset="100%" stopColor={POSITIVE_GREEN} stopOpacity={endOpacity} />
-      </>
-    );
-  }
-  if (max <= 0) {
-    return (
-      <>
-        <stop offset="0%" stopColor={NEGATIVE_RED} stopOpacity={endOpacity} />
-        <stop offset="100%" stopColor={NEGATIVE_RED} stopOpacity={startOpacity} />
-      </>
-    );
-  }
-  const zeroOffset = (max / (max - min)) * 100;
+/** Vertical gradient stops of a single color with start/end opacity. */
+export function gradientStops(color: string, startOpacity = 1, endOpacity = 1): ReactNode {
   return (
     <>
-      <stop offset="0%" stopColor={POSITIVE_GREEN} stopOpacity={1} />
-      <stop offset={`${zeroOffset}%`} stopColor={POSITIVE_GREEN} stopOpacity={endOpacity} />
-      <stop offset={`${zeroOffset}%`} stopColor={NEGATIVE_RED} stopOpacity={endOpacity} />
-      <stop offset="100%" stopColor={NEGATIVE_RED} stopOpacity={1} />
+      <stop offset="0%" stopColor={color} stopOpacity={startOpacity} />
+      <stop offset="100%" stopColor={color} stopOpacity={endOpacity} />
     </>
   );
 }

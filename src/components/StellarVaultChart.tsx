@@ -12,8 +12,12 @@ import {
   Tooltip,
   type TooltipProps,
 } from "recharts";
-import { getAreaStops, getYDomain, POSITIVE_GREEN, NEGATIVE_RED } from "@/lib/graph";
+import { gradientStops, getYDomain, LINE_COLOR, AREA_COLOR } from "@/lib/graph";
 import { useVaultHistory, usePriceHistory } from "@/hooks/useVaultData";
+
+// UIVaultCushion theme (globals.css .dark): grid --stroke-secondary, axes --container-border.
+const GRID_STROKE = "hsl(0, 0%, 35%)";
+const AXIS_STROKE = "hsl(0, 0%, 45%)";
 
 type GraphType = "tvl" | "sharePrice" | "roi" | "xlmusd";
 type Period = "7d" | "30d" | "90d" | "all";
@@ -115,13 +119,13 @@ export function StellarVaultChart({
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="#242a36" vertical={false} />
+              <CartesianGrid stroke={GRID_STROKE} vertical={false} />
               <defs>
                 <linearGradient id={LINE_ID} x1="0" y1="0" x2="0" y2="1">
-                  {getAreaStops(minY, maxY)}
+                  {gradientStops(LINE_COLOR)}
                 </linearGradient>
                 <linearGradient id={AREA_ID} x1="0" y1="0" x2="0" y2="1">
-                  {getAreaStops(minY, maxY, { startOpacity: 0.5, endOpacity: 0.05 })}
+                  {gradientStops(AREA_COLOR, 0.6, 0.2)}
                 </linearGradient>
               </defs>
               <Area
@@ -136,7 +140,7 @@ export function StellarVaultChart({
                 tickMargin={8}
                 minTickGap={40}
                 tickLine={false}
-                stroke="#5b6472"
+                stroke={AXIS_STROKE}
                 tickFormatter={(t) => dayjs.unix(t).format("DD/MM")}
               />
               <YAxis
@@ -144,12 +148,12 @@ export function StellarVaultChart({
                 tickMargin={8}
                 width={52}
                 tickLine={false}
-                stroke="#5b6472"
+                stroke={AXIS_STROKE}
                 domain={yDomain as [number, string]}
                 tickFormatter={(t: number) => fmtValue(type, t)}
               />
               <Tooltip
-                cursor={{ strokeDasharray: "4", stroke: "#5b6472" }}
+                cursor={{ strokeDasharray: "4", stroke: AXIS_STROKE }}
                 content={(p: TooltipProps<number, string>) => {
                   if (!p.active || !p.payload?.length) return null;
                   const v = p.payload[0].value ?? 0;
@@ -159,7 +163,7 @@ export function StellarVaultChart({
                       <span className="text-xs text-gray-400">{date}</span>
                       <span
                         className="text-sm font-semibold"
-                        style={{ color: v >= 0 ? POSITIVE_GREEN : NEGATIVE_RED }}
+                        style={{ color: LINE_COLOR }}
                       >
                         {fmtValue(type, v)}
                         {type === "tvl" ? ` ${symbol}` : ""}
