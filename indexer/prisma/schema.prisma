@@ -57,3 +57,17 @@ model IngestState {
   contractId String @id @map("contract_id")
   lastLedger Int    @map("last_ledger")
 }
+
+/// USD price history per ticker, deduped to one row per hour (`bucket` =
+/// floor(unix / 3600)). Accumulated from the Reflector oracle each cycle; the
+/// historical window can be backfilled locally. Served to the dashboard chart.
+model PriceSnapshot {
+  symbol   String
+  bucket   Int // unix hour bucket — dedup key
+  ts       DateTime
+  priceUsd Float    @map("price_usd")
+
+  @@id([symbol, bucket])
+  @@index([symbol, ts])
+  @@map("price_snapshot")
+}

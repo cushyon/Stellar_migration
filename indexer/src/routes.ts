@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { vaultStats, vaultHistory, userPositions } from "./metrics.js";
+import { getPriceHistory } from "./prices.js";
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async () => ({ ok: true }));
@@ -23,5 +24,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/users/:address/positions", async (req) => {
     const { address } = req.params as { address: string };
     return userPositions(address);
+  });
+
+  // Stored USD price history for a ticker (accumulated from the Reflector
+  // oracle each cycle; served from the indexer DB). ?days=7|30|90|…
+  app.get("/prices/:symbol", async (req) => {
+    const { symbol } = req.params as { symbol: string };
+    const { days } = req.query as { days?: string };
+    const d = Math.min(Math.max(Number(days ?? "30"), 1), 365);
+    return getPriceHistory(symbol.toUpperCase(), d);
   });
 }

@@ -50,6 +50,28 @@ export function addressArg(addr: string): xdr.ScVal {
   return new Address(addr).toScVal();
 }
 
+/// Reflector `Asset::Other(Symbol)` = Vec[Symbol("Other"), Symbol(sym)].
+function reflectorAssetOther(sym: string): xdr.ScVal {
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Other"), xdr.ScVal.scvSymbol(sym)]);
+}
+
+/// Real recent price history for `symbol` from the Reflector CEX/DEX feed
+/// (USD, 14 dp). Returns oldest→newest `[{ ts (unix s), price (USD) }]`.
+export async function reflectorPrices(
+  reflectorId: string,
+  symbol: string,
+  records: number
+): Promise<{ ts: number; price: number }[]> {
+  const raw = (await readContract(reflectorId, "prices", [
+    reflectorAssetOther(symbol),
+    xdr.ScVal.scvU32(records),
+  ])) as { price: bigint; timestamp: bigint }[] | null;
+  if (!raw || !Array.isArray(raw)) return [];
+  return raw
+    .map((p) => ({ ts: Number(p.timestamp), price: Number(p.price) / 1e14 }))
+    .sort((a, b) => a.ts - b.ts);
+}
+
 /// Decode an RPC event topic/value, which may arrive as a base64 XDR string or
 /// an already-parsed ScVal, into a native JS value.
 export function toNative(v: unknown): unknown {
