@@ -54,7 +54,13 @@ function VaultPerformancePanel({
 }) {
   const symbol = config.asset.symbol;
   const decimals = config.asset.decimals;
-  const roi = stats?.performance.apy ?? stats?.performance["30d"] ?? null;
+  // Prefer return-since-inception (defined from day one) over the trailing
+  // windows, which are null until the vault is old enough.
+  const roi =
+    stats?.performance.inception ??
+    stats?.performance.apy ??
+    stats?.performance["30d"] ??
+    null;
 
   return (
     <div className="flex flex-col w-full gap-6">

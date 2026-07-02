@@ -75,7 +75,11 @@ export function StellarVaultChart({
             type === "tvl"
               ? Number(BigInt(h.nav)) / 10 ** decimals
               : type === "sharePrice"
-                ? h.sharePrice
+                ? // index to 1.0000 at inception — the raw NAV/supply ratio is
+                  // ~10^-decimals_offset and meaningless on its own.
+                  firstSharePrice > 0
+                  ? h.sharePrice / firstSharePrice
+                  : 1
                 : firstSharePrice > 0
                   ? (h.sharePrice / firstSharePrice - 1) * 100
                   : 0,
@@ -85,6 +89,21 @@ export function StellarVaultChart({
   const minY = values.length ? Math.min(...values) : 0;
   const maxY = values.length ? Math.max(...values) : 0;
   const yDomain = getYDomain(minY, maxY);
+
+  // Sub-2-day history (fresh vault) → show clock time, not repeated DD/MM.
+  const spanDays =
+    data.length > 1 ? (data[data.length - 1].ts - data[0].ts) / 86_400 : 0;
+  const xFmt = (t: number) => dayjs.unix(t).format(spanDays < 2 ? "HH:mm" : "DD/MM");
+  const tipFmt = (t: number) =>
+    dayjs.unix(t).format(spanDays < 2 ? "D MMM HH:mm" : "D MMM YYYY");
+  const legend =
+    type === "tvl"
+      ? `Denominated in ${symbol}`
+      : type === "sharePrice"
+        ? "Indexed to 1.0000 at inception"
+        : type === "roi"
+          ? "Return since inception"
+          : "USD (Reflector oracle)";
 
   const btn = (active: boolean) =>
     `px-3 py-1 rounded-full text-sm transition-colors ${
@@ -141,15 +160,15 @@ export function StellarVaultChart({
                 minTickGap={40}
                 tickLine={false}
                 stroke={AXIS_STROKE}
-                tickFormatter={(t) => dayjs.unix(t).format("DD/MM")}
+                tickFormatter={xFmt}
               />
               <YAxis
                 dataKey="value"
                 tickMargin={8}
-                width={52}
+                width={64}
                 tickLine={false}
                 stroke={AXIS_STROKE}
-                domain={yDomain as [number, string]}
+                domain={yDomain as [number | string, number | string]}
                 tickFormatter={(t: number) => fmtValue(type, t)}
               />
               <Tooltip
@@ -157,7 +176,7 @@ export function StellarVaultChart({
                 content={(p: TooltipProps<number, string>) => {
                   if (!p.active || !p.payload?.length) return null;
                   const v = p.payload[0].value ?? 0;
-                  const date = dayjs.unix(p.label as number).format("D MMM YYYY");
+                  const date = tipFmt(p.label as number);
                   return (
                     <div className="flex flex-col gap-1 p-2 rounded border border-neutral-700 bg-neutral-950">
                       <span className="text-xs text-gray-400">{date}</span>
@@ -178,7 +197,7 @@ export function StellarVaultChart({
       </div>
 
       <div className="flex items-center gap-1 mt-2 text-sm text-gray-500">
-        <span>Denominated in {symbol}</span>
+        <span>{legend}</span>
       </div>
     </div>
   );

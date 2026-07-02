@@ -15,6 +15,7 @@ export interface VaultStats {
     "60d": number | null;
     "90d": number | null;
     apy: number | null;
+    inception: number | null; // return since first non-zero-price snapshot
   };
   ledger: number;
   ts: string;
