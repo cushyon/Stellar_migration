@@ -33,6 +33,16 @@ export async function vaultStats(vaultId: string) {
   const r90 = await trailingReturn(vaultId, latest.sharePrice, latest.ts, 90);
   const apy = r30 !== null ? Math.pow(1 + r30, 365 / 30) - 1 : null;
 
+  // Return since inception: measured against the first non-zero-price snapshot,
+  // so a fresh vault reads 0 rather than null (the trailing windows have no
+  // old-enough point yet).
+  const first = await prisma.vaultSnapshot.findFirst({
+    where: { contractId: vaultId, sharePrice: { gt: 0 } },
+    orderBy: { ts: "asc" },
+  });
+  const inception =
+    first && first.sharePrice > 0 ? latest.sharePrice / first.sharePrice - 1 : null;
+
   return {
     vaultId,
     tvl: latest.nav.toString(), // TVL = NAV, in base units
@@ -43,7 +53,7 @@ export async function vaultStats(vaultId: string) {
       basePct,
       riskyPct: 1 - basePct,
     },
-    performance: { "30d": r30, "60d": r60, "90d": r90, apy },
+    performance: { "30d": r30, "60d": r60, "90d": r90, apy, inception },
     ledger: latest.ledger,
     ts: latest.ts,
   };
