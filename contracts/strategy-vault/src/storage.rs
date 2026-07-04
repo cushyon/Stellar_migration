@@ -39,13 +39,13 @@ pub struct StrategyConfig {
     pub max_trade_size: i128,
     /// Minimum seconds between strategy trades.
     pub cooldown_period: u64,
-    /// Swap allowlist — both `token_in` and `token_out` must be present.
+    /// Swap allowlist - both `token_in` and `token_out` must be present.
     pub allowed_tokens: Vec<Address>,
 
     // --- Floor (Decision 3) -----------------------------------------------
     /// Minimum base-asset allocation, in bps of NAV (0..=10_000). A strategy
     /// trade that would push the base allocation below this reverts.
-    /// PARAM: set with Wajih — do not default.
+    /// PARAM: set with Wajih - do not default.
     pub floor_bps: u32,
 
     // --- Oracle / circuit breaker (Decision 4) ----------------------------
@@ -58,17 +58,17 @@ pub struct StrategyConfig {
     /// vault needs this to price the tokens it holds by address.
     pub asset_symbols: Map<Address, Symbol>,
     /// Max |lastprice − twap| / twap before execution halts, in bps.
-    /// PARAM: set with Wajih — do not default.
+    /// PARAM: set with Wajih - do not default.
     pub deviation_bps: u32,
     /// Max price age (seconds) before a quote is rejected as stale.
-    /// PARAM: set with Wajih — do not default.
+    /// PARAM: set with Wajih - do not default.
     pub staleness: u64,
 
     // --- Inflation protection (Decision 2) --------------------------------
     /// Virtual-share offset exponent: the share-supply term in the conversion
     /// math is `total_supply + 10^decimals_offset` (the asset term is `+1`),
     /// per OZ ERC-4626. Hardening over the weakest setting (0).
-    /// PARAM: set with Wajih — do not default.
+    /// PARAM: set with Wajih - do not default.
     pub decimals_offset: u32,
 
     // --- Fee scaffolding (Decision 6) -------------------------------------

@@ -8,7 +8,7 @@ export type StellarVaultConfig = {
   name: string;
   /** URL slug for the dashboard route. */
   vaultId: string;
-  /** Onchain Soroban contract id — what the indexer API is keyed on. */
+  /** Onchain Soroban contract id - what the indexer API is keyed on. */
   contractId: string;
   description: string;
   /** Capital-protection floor in basis points (min base allocation of NAV). */

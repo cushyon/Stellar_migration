@@ -68,12 +68,12 @@ function VaultPerformancePanel({
       <div className="grid w-full grid-cols-2 gap-4 p-4 rounded sm:flex sm:gap-0 border border-neutral-800 bg-neutral-900">
         <StatCard
           label="ROI"
-          value={roi != null ? (roi * 100).toFixed(2) : "—"}
+          value={roi != null ? (roi * 100).toFixed(2) : "-"}
           suffix="%"
         />
         <StatCard
           label="TVL"
-          value={stats ? formatAmount(stats.tvl, decimals) : "—"}
+          value={stats ? formatAmount(stats.tvl, decimals) : "-"}
           suffix={symbol}
         />
         <StatCard label="Protection floor" value={`${config.floorBps / 100}`} suffix="%" />
@@ -251,7 +251,7 @@ export default function StellarVaultPage(props: {
   const vaultConfig = getStellarVaultConfig(params.vaultId);
 
   const address = useStellarWalletStore((s) => s.address);
-  // Hooks run unconditionally (before any early return) — fall back to "" id.
+  // Hooks run unconditionally (before any early return) - fall back to "" id.
   const { stats } = useVaultStats(vaultConfig?.contractId ?? "");
   const position = useUserPosition(vaultConfig?.contractId ?? "", address);
 

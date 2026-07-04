@@ -39,7 +39,7 @@ pub fn execute(
         return Err(VaultError::UnauthorizedOperator);
     }
 
-    // 2. Replay protection — strict, monotonic nonce.
+    // 2. Replay protection - strict, monotonic nonce.
     let expected_nonce = storage::get_nonce(e);
     if nonce != expected_nonce {
         return Err(VaultError::NonceMismatch);
@@ -80,7 +80,7 @@ pub fn execute(
     let balance_out_after = token::Client::new(e, &token_out).balance(&contract);
     let amount_out = balance_out_after - balance_out_before;
 
-    // 8. Slippage — realized output must meet the operator's floor.
+    // 8. Slippage - realized output must meet the operator's floor.
     if amount_out < min_amount_out {
         return Err(VaultError::SlippageExceeded);
     }

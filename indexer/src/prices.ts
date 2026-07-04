@@ -5,7 +5,7 @@ import { reflectorPrices } from "./stellar.js";
 const HOUR = 3600;
 
 /// Upsert `{ ts, price }` points into `price_snapshot`, deduped to one row per
-/// hour. The storage layer — real Reflector readings and any local backfill
+/// hour. The storage layer - real Reflector readings and any local backfill
 /// both land here, so the DB is the single source of truth for the chart.
 export async function upsertPoints(
   symbol: string,

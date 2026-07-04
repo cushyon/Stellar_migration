@@ -3,13 +3,13 @@
 //! - **Management fee**: `mgmt_fee_bps` per year of NAV, prorated by the time
 //!   elapsed since the last collection.
 //! - **Performance fee**: `perf_fee_bps` of the profit realized above a
-//!   **high-water mark** (HWM) — the highest scaled share price at which a perf
+//!   **high-water mark** (HWM) - the highest scaled share price at which a perf
 //!   fee was last taken. New gains above the HWM are charged; the HWM then
 //!   ratchets up, so the same gain is never charged twice.
 //!
 //! Both are paid by **minting shares to the fee recipient** (dilution of
 //! existing holders), valued at the current share price. `collect` is
-//! permissionless — anyone may trigger it; the fees only ever accrue to the
+//! permissionless - anyone may trigger it; the fees only ever accrue to the
 //! configured recipient.
 
 use soroban_sdk::Env;

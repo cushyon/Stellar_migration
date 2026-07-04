@@ -12,9 +12,9 @@ export function formatAmount(value: string | bigint, decimals: number, dp = 2): 
   return n.toFixed(dp);
 }
 
-/** A fractional return (e.g. 0.0514) → "+5.14%" / "-2.10%" / "—" when null. */
+/** A fractional return (e.g. 0.0514) → "+5.14%" / "-2.10%" / "-" when null. */
 export function formatPct(ret: number | null | undefined): string {
-  if (ret == null) return "—";
+  if (ret == null) return "-";
   const pct = ret * 100;
   return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }

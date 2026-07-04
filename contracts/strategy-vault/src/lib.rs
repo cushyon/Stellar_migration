@@ -336,7 +336,7 @@ impl StrategyVaultContract {
     }
 
     /// Withdraw exactly `assets` of underlying token, burning shares from `owner`.
-    /// Anyone can call this — User Exit Guarantee.
+    /// Anyone can call this - User Exit Guarantee.
     pub fn withdraw(
         e: Env,
         owner: Address,
@@ -426,7 +426,7 @@ impl StrategyVaultContract {
 
     /// Execute a strategy trade. `nonce` must equal the vault's current nonce
     /// (replay protection); `deadline` is a ledger timestamp past which the
-    /// trade is rejected. Frozen signature — the offchain orchestrator builds
+    /// trade is rejected. Frozen signature - the offchain orchestrator builds
     /// transactions against it.
     #[allow(clippy::too_many_arguments)]
     pub fn execute_strategy(
@@ -468,7 +468,7 @@ impl StrategyVaultContract {
     // -----------------------------------------------------------------------
 
     /// Guardian (or admin) halts deposits/mints/strategy. Withdraw & redeem
-    /// stay callable — the User Exit Guarantee survives a pause.
+    /// stay callable - the User Exit Guarantee survives a pause.
     pub fn pause(e: Env, caller: Address) -> Result<(), VaultError> {
         storage::bump_instance(&e);
         caller.require_auth();

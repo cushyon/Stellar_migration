@@ -30,11 +30,11 @@ const TYPES: { k: GraphType; label: string; info: string }[] = [
     label: "Share price",
     info: "Net asset value per share, indexed to 1.0000 at inception.",
   },
-  { k: "roi", label: "ROI", info: "Return since inception, denominated in XLM." },
+  { k: "roi", label: "ROI (XLM)", info: "Return since inception, denominated in XLM." },
   {
     k: "usdRoi",
     label: "ROI (USD)",
-    info: "Return since inception valued in USD — share value × Reflector XLM/USD. Captures both vault performance and the XLM/USD move.",
+    info: "Return since inception valued in USD - share value × Reflector XLM/USD. Captures both vault performance and the XLM/USD move.",
   },
 ];
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
@@ -77,7 +77,7 @@ export function StellarVaultChart({
 
   const firstSharePrice = history.find((h) => h.sharePrice > 0)?.sharePrice ?? 0;
 
-  // XLM/USD at-or-before a unix timestamp (prices are ascending) — lets us value
+  // XLM/USD at-or-before a unix timestamp (prices are ascending) - lets us value
   // each vault snapshot in USD without an extra request.
   const priceAt = (tsSec: number): number => {
     let p = prices.length ? prices[0].price : 0;
@@ -88,7 +88,7 @@ export function StellarVaultChart({
     return p;
   };
 
-  // USD value of one share at inception — the baseline for USD ROI.
+  // USD value of one share at inception - the baseline for USD ROI.
   const firstUsd = (() => {
     const f = history.find((h) => h.sharePrice > 0);
     if (!f) return 0;
@@ -126,7 +126,7 @@ export function StellarVaultChart({
     : niceScale(minY, maxY);
 
   // Adapt the x-axis to the actual span: a fresh vault covers hours/days, the
-  // longer views cover weeks — never repeat the same DD/MM across ticks.
+  // longer views cover weeks - never repeat the same DD/MM across ticks.
   const spanDays =
     data.length > 1 ? (data[data.length - 1].ts - data[0].ts) / 86_400 : 0;
   const xPattern = spanDays <= 2 ? "HH:mm" : spanDays <= 10 ? "DD/MM HH:mm" : "DD/MM";
@@ -153,12 +153,13 @@ export function StellarVaultChart({
               </button>
             ))}
           </div>
-          {/* hover for the metric's definition — no permanent caption */}
-          <span
-            title={info}
-            className="flex items-center justify-center w-5 h-5 text-xs italic border rounded-full cursor-help text-gray-400 border-neutral-600"
-          >
+          {/* hover for the metric's definition - styled tooltip, not the
+              native `title` attr (1s delay, unstyled → feels broken) */}
+          <span className="relative group flex items-center justify-center w-5 h-5 text-xs italic border rounded-full cursor-help text-gray-400 border-neutral-600">
             i
+            <span className="absolute top-7 left-1/2 -translate-x-1/2 z-10 hidden group-hover:block w-64 p-2 text-xs not-italic text-left rounded border border-neutral-700 bg-neutral-950 text-gray-300">
+              {info}
+            </span>
           </span>
         </div>
         <div className="flex items-center gap-1 p-1 rounded-full bg-[#2a3142]">

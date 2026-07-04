@@ -7,7 +7,7 @@ import { decodeEvent, shareDeltas, type DecodedEvent } from "./decode.js";
 const LEDGERS_PER_DAY = 17280; // ~5s ledgers
 // Cold-start lookback. RPC getEvents retains ~7 days, but the queryable window
 // is bounded, so we start ~1 day back (captures recent activity safely within
-// retention). Older history would need the archive `getLedgers` path — a
+// retention). Older history would need the archive `getLedgers` path - a
 // documented follow-up, not needed now.
 const COLD_START_LOOKBACK = LEDGERS_PER_DAY;
 
@@ -35,7 +35,7 @@ export async function ingestOnce(log?: {
   let scannedTo = start - 1;
   let cursor: string | undefined;
 
-  // getEvents returns a `cursor` on EVERY page — including empty ones — that
+  // getEvents returns a `cursor` on EVERY page - including empty ones - that
   // advances through the ledger range a window at a time. Paginate on the
   // cursor until it stops advancing (caught up to latest); do NOT stop just
   // because a page has < limit events (early pages are often empty).
@@ -80,7 +80,7 @@ async function persist(ev: DecodedEvent): Promise<boolean> {
       },
     });
   } catch (e: any) {
-    if (e?.code === "P2002") return false; // duplicate TOID — already ingested
+    if (e?.code === "P2002") return false; // duplicate TOID - already ingested
     throw e;
   }
 

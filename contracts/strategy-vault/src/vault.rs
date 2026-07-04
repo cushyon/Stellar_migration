@@ -9,14 +9,14 @@ use crate::storage;
 /// this resists first-depositor inflation/donation attacks; a larger
 /// `decimals_offset` gives the victim more share precision so their deposit
 /// cannot round to zero after a donation. `decimals_offset` is a deliberate
-/// security parameter — see `StrategyConfig`. PARAM: set with Wajih.
+/// security parameter - see `StrategyConfig`. PARAM: set with Wajih.
 fn supply_offset(e: &Env) -> i128 {
     let offset = storage::get_config(e).decimals_offset;
     10_i128.checked_pow(offset).unwrap_or(i128::MAX)
 }
 
 // ---------------------------------------------------------------------------
-// Share math — all functions funnel through the virtual offset.
+// Share math - all functions funnel through the virtual offset.
 // `total_assets` is the multi-asset NAV (base + oracle-valued risky legs),
 // so share price reflects the whole portfolio.
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ pub fn shares_to_assets(e: &Env, total_assets: i128, total_supply: i128, shares:
     shares.checked_mul(adjusted_assets).unwrap_or(i128::MAX) / adjusted_supply
 }
 
-/// Convert assets → shares, rounding UP (used for withdraw — user burns more shares).
+/// Convert assets → shares, rounding UP (used for withdraw - user burns more shares).
 pub fn assets_to_shares_round_up(e: &Env, total_assets: i128, total_supply: i128, assets: i128) -> i128 {
     let adjusted_supply = total_supply + supply_offset(e);
     let adjusted_assets = total_assets + 1;
@@ -46,7 +46,7 @@ pub fn assets_to_shares_round_up(e: &Env, total_assets: i128, total_supply: i128
     (numerator + adjusted_assets - 1) / adjusted_assets
 }
 
-/// Convert shares → assets, rounding UP (used for mint — user pays more assets).
+/// Convert shares → assets, rounding UP (used for mint - user pays more assets).
 pub fn shares_to_assets_round_up(e: &Env, total_assets: i128, total_supply: i128, shares: i128) -> i128 {
     let adjusted_supply = total_supply + supply_offset(e);
     let adjusted_assets = total_assets + 1;
@@ -56,7 +56,7 @@ pub fn shares_to_assets_round_up(e: &Env, total_assets: i128, total_supply: i128
 }
 
 // ---------------------------------------------------------------------------
-// Real total assets — reads actual token balance (User Exit Guarantee)
+// Real total assets - reads actual token balance (User Exit Guarantee)
 // ---------------------------------------------------------------------------
 
 /// Multi-asset NAV in base units: `base_balance + Σ(risky_balanceᵢ × priceᵢ)`,
@@ -64,12 +64,12 @@ pub fn shares_to_assets_round_up(e: &Env, total_assets: i128, total_supply: i128
 /// oracle. This is the single chokepoint every conversion/preview funnels
 /// through, so share price reflects the whole portfolio (Decision 1).
 ///
-/// It is a *live* read of real balances + oracle prices — never a stored
-/// bookkeeping number — which keeps the exit guarantee honest: when the vault
+/// It is a *live* read of real balances + oracle prices - never a stored
+/// bookkeeping number - which keeps the exit guarantee honest: when the vault
 /// holds only base (the keeper-maintained buffer / de-risked state), this needs
 /// no oracle and `withdraw`/`redeem` always price correctly. When the vault
 /// holds risky legs and the oracle is unavailable/stale/deviating, NAV cannot
-/// be computed and the call reverts — a documented limitation (Decision 7 /
+/// be computed and the call reverts - a documented limitation (Decision 7 /
 /// architecture caveat: no continuous guarantee under keeper downtime or
 /// market gaps).
 pub fn total_assets(e: &Env) -> i128 {

@@ -17,7 +17,7 @@ export function gradientStops(color: string, startOpacity = 1, endOpacity = 1): 
 }
 
 /**
- * Smallest/closest "nice" number near `x` — 1, 2, 5 × 10ⁿ.
+ * Smallest/closest "nice" number near `x` - 1, 2, 5 × 10ⁿ.
  * Heckbert, "Nice Numbers for Graph Labels", Graphics Gems (1990).
  */
 function niceNum(x: number, round: boolean): number {
@@ -32,7 +32,7 @@ function niceNum(x: number, round: boolean): number {
 
 /**
  * Round domain + evenly-spaced round ticks for a numeric axis (loose labeling).
- * Pass both `domain` and `ticks` to a recharts axis — forcing a raw [min,max]
+ * Pass both `domain` and `ticks` to a recharts axis - forcing a raw [min,max]
  * domain makes recharts emit ugly equal-split labels.
  */
 export function niceScale(

@@ -1,6 +1,6 @@
 //! Onchain event emission via the `#[contractevent]` macro (soroban-sdk 26).
 //!
-//! Schema is a frozen interface contract — the offchain indexer is built
+//! Schema is a frozen interface contract - the offchain indexer is built
 //! against the exact topics/data below. Any change here is an indexer change;
 //! flag it loudly. See README "Event schema" / plan Appendix A.
 //!
@@ -14,7 +14,7 @@
 
 use soroban_sdk::{contractevent, Address, Env};
 
-/// `deposit` — topics `[deposit, from, receiver]`, data `[assets, shares]`.
+/// `deposit` - topics `[deposit, from, receiver]`, data `[assets, shares]`.
 /// Emitted by both `deposit` (assets-specified) and `mint` (shares-specified).
 #[contractevent(data_format = "vec")]
 pub struct Deposit {
@@ -26,7 +26,7 @@ pub struct Deposit {
     pub shares: i128,
 }
 
-/// `withdraw` — topics `[withdraw, owner, receiver]`, data `[assets, shares]`.
+/// `withdraw` - topics `[withdraw, owner, receiver]`, data `[assets, shares]`.
 /// Emitted by both `withdraw` (assets-specified) and `redeem` (shares-specified).
 #[contractevent(data_format = "vec")]
 pub struct Withdraw {
@@ -38,7 +38,7 @@ pub struct Withdraw {
     pub shares: i128,
 }
 
-/// `transfer` — topics `[transfer, from, to]`, data `amount` (SEP-41).
+/// `transfer` - topics `[transfer, from, to]`, data `amount` (SEP-41).
 #[contractevent(data_format = "single-value")]
 pub struct Transfer {
     #[topic]
@@ -48,7 +48,7 @@ pub struct Transfer {
     pub amount: i128,
 }
 
-/// `approve` — topics `[approve, from, spender]`, data `[amount, expiration_ledger]` (SEP-41).
+/// `approve` - topics `[approve, from, spender]`, data `[amount, expiration_ledger]` (SEP-41).
 #[contractevent(data_format = "vec")]
 pub struct Approve {
     #[topic]
@@ -59,7 +59,7 @@ pub struct Approve {
     pub expiration_ledger: u32,
 }
 
-/// `burn` — topics `[burn, from]`, data `amount` (SEP-41).
+/// `burn` - topics `[burn, from]`, data `amount` (SEP-41).
 #[contractevent(data_format = "single-value")]
 pub struct Burn {
     #[topic]
@@ -67,7 +67,7 @@ pub struct Burn {
     pub amount: i128,
 }
 
-/// `fees` — topics `[fees, recipient]`, data `[mgmt_fee, perf_fee, shares_minted]`.
+/// `fees` - topics `[fees, recipient]`, data `[mgmt_fee, perf_fee, shares_minted]`.
 /// mgmt/perf are in base-asset units; shares are minted to the recipient.
 #[contractevent(data_format = "vec")]
 pub struct Fees {
@@ -78,7 +78,7 @@ pub struct Fees {
     pub shares_minted: i128,
 }
 
-/// `strategy` — topics `[strategy, operator]`,
+/// `strategy` - topics `[strategy, operator]`,
 /// data `[nonce, token_in, token_out, amount_in, amount_out, nav_before, nav_after]`.
 #[contractevent(topics = ["strategy"], data_format = "vec")]
 pub struct StrategyExecuted {
@@ -95,12 +95,12 @@ pub struct StrategyExecuted {
 
 // NOTE: there is intentionally no `circuit_broken` event. The oracle
 // deviation/staleness halt is a revert (see oracle::get_safe_price), and
-// Soroban rolls back events on revert — so such an event could never be
+// Soroban rolls back events on revert - so such an event could never be
 // durably indexed. The durable signal is the OracleDeviation/OracleStale
 // error code on the failed transaction.
 
 // ---------------------------------------------------------------------------
-// Thin emit helpers — keep call sites in lib.rs/strategy.rs clean and centralize
+// Thin emit helpers - keep call sites in lib.rs/strategy.rs clean and centralize
 // the schema here.
 // ---------------------------------------------------------------------------
 

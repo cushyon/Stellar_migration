@@ -1,6 +1,6 @@
 /**
  * Client for the Cushion indexer API (D3). The dashboard reads vault metrics
- * from indexed Postgres here — not live RPC — for sub-second, consistent stats.
+ * from indexed Postgres here - not live RPC - for sub-second, consistent stats.
  */
 const BASE =
   process.env.NEXT_PUBLIC_INDEXER_URL?.replace(/\/$/, "") ?? "http://localhost:8080";

@@ -9,7 +9,7 @@ const StellarClientOnly = dynamic(
 
 /**
  * Wraps children with the Stellar Wallets Kit initialisation.
- * Safe to import statically — the heavy lifting is deferred
+ * Safe to import statically - the heavy lifting is deferred
  * to StellarClientOnly which is loaded with ssr: false.
  */
 export default function StellarWalletProvider({

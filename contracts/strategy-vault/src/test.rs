@@ -16,7 +16,7 @@ use soroban_sdk::{
 use stellar_contract_utils::pausable;
 
 // ---------------------------------------------------------------------------
-// Mock Reflector oracle — matches the SEP-40 surface the vault calls
+// Mock Reflector oracle - matches the SEP-40 surface the vault calls
 // (lastprice / twap). `set` configures the returned quote; an unconfigured
 // instance returns None (→ PriceUnavailable).
 // ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ fn point_vault_at_mock(e: &Env, vault_addr: &Address, base: &Address, risky: &Ad
 }
 
 // ---------------------------------------------------------------------------
-// Mock DEX router for strategy tests — delivers a configured amount of
+// Mock DEX router for strategy tests - delivers a configured amount of
 // `token_out` on swap (pre-funded with `token_out`). `set_out` configures it.
 // ---------------------------------------------------------------------------
 
@@ -172,7 +172,7 @@ fn setup_strategy(e: &Env) -> StratFix {
 }
 
 // ===========================================================================
-// Test setup macro — avoids lifetime issues with clients
+// Test setup macro - avoids lifetime issues with clients
 // ===========================================================================
 
 macro_rules! setup {
@@ -488,7 +488,7 @@ fn test_convert_roundtrip() {
     let shares = vault.convert_to_shares(&assets);
     let back = vault.convert_to_assets(&shares);
 
-    // Rounding down both ways — back should be <= original
+    // Rounding down both ways - back should be <= original
     assert!(back <= assets);
     // But very close (within 1 unit)
     assert!(assets - back <= 1);
@@ -584,7 +584,7 @@ fn test_strategy_unauthorized_caller() {
 
     vault.deposit(&user, &1_000_0000000i128, &user);
 
-    // user is not the operator — should fail
+    // user is not the operator - should fail
     vault.execute_strategy(
         &user, &router, &token_addr, &token_addr,
         &100_0000000i128, &90_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
@@ -642,7 +642,7 @@ fn test_virtual_offset_prevents_inflation_attack() {
     // We simulate by having attacker donate to vault address directly.
     tc.transfer(&attacker, &vault_addr, &1_000_0000000i128);
 
-    // Victim deposits — should still get a non-trivial share amount
+    // Victim deposits - should still get a non-trivial share amount
     let victim = Address::generate(&e);
     sac.mint(&victim, &10_000_0000000);
     let victim_shares = vault.deposit(&victim, &1_000_0000000i128, &victim);
@@ -706,12 +706,12 @@ fn test_mint_shares() {
 }
 
 // ===========================================================================
-// Strategy execution tests (A3/A4/B4/B5) — full execute_strategy: nonce,
+// Strategy execution tests (A3/A4/B4/B5) - full execute_strategy: nonce,
 // deadline, cooldown, slippage, floor guardrail, NAV invariant, event.
 // ===========================================================================
 
-/// B5 — the decisive empirical invariant: a swap at the fair (oracle) price
-/// leaves NAV — and therefore share price (supply unchanged) — unchanged.
+/// B5 - the decisive empirical invariant: a swap at the fair (oracle) price
+/// leaves NAV - and therefore share price (supply unchanged) - unchanged.
 /// Converting base→risky at fair value neither creates nor destroys value.
 /// If NAV jumps, the risky leg is being double-counted or mis-priced.
 #[test]
@@ -913,7 +913,7 @@ fn test_preview_mint_rounds_up() {
 }
 
 // ===========================================================================
-// Fee tests — management (1%/yr) + performance (20% over high-water mark).
+// Fee tests - management (1%/yr) + performance (20% over high-water mark).
 // Fees are paid as shares minted to the fee recipient.
 // ===========================================================================
 
@@ -973,7 +973,7 @@ fn test_performance_fee_and_high_water_mark() {
 }
 
 // ===========================================================================
-// Event emission tests (A1) — schema locked in events.rs / README Appendix A.
+// Event emission tests (A1) - schema locked in events.rs / README Appendix A.
 // Each asserts the EXACT vault-emitted event sequence (filter_by_contract),
 // which also proves internal helpers never double-emit.
 // ===========================================================================
@@ -1065,7 +1065,7 @@ fn test_event_approve_emitted() {
 }
 
 // ===========================================================================
-// Oracle tests (B2) — Reflector via mock. Cross-rate (risky-in-base via USD),
+// Oracle tests (B2) - Reflector via mock. Cross-rate (risky-in-base via USD),
 // staleness guard, and lastprice-vs-recent-prices deviation breaker
 // (revert-on-trip). point_vault_at_mock pre-prices the base (XLM) at 1.0 USD,
 // so a risky USD price equals its base cross-rate directly.
@@ -1173,7 +1173,7 @@ fn test_oracle_price_unavailable() {
 }
 
 // ===========================================================================
-// Multi-asset NAV tests (B3) — total_assets = base + Σ(risky × oracle price).
+// Multi-asset NAV tests (B3) - total_assets = base + Σ(risky × oracle price).
 // total_assets is the single chokepoint share price funnels through.
 // ===========================================================================
 
@@ -1239,7 +1239,7 @@ fn test_nav_reverts_on_stale_oracle_with_risky() {
 }
 
 // ===========================================================================
-// Pause / guardian tests (A2) — OZ Pausable. Pause halts deposit/mint/strategy;
+// Pause / guardian tests (A2) - OZ Pausable. Pause halts deposit/mint/strategy;
 // withdraw/redeem stay callable (User Exit Guarantee). EnforcedPause = #1000.
 // ===========================================================================
 

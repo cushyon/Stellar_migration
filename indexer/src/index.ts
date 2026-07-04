@@ -12,7 +12,7 @@ async function main() {
   await app.register(cors, { origin: true });
   await registerRoutes(app);
 
-  // Single embedded poller — one service, one cron, no separate cron service,
+  // Single embedded poller - one service, one cron, no separate cron service,
   // no infinite while-loop. Overlapping cycles are skipped.
   let running = false;
   const tick = async () => {

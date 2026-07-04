@@ -8,7 +8,7 @@ export function Footer() {
       <div className="container mx-auto max-w-7xl">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-y-12 md:gap-0">
           <div className="md:col-span-6 flex flex-col gap-0">
-            {/* 1️⃣ Logo — pull it left only (no translate-y) */}
+            {/* 1️⃣ Logo - pull it left only (no translate-y) */}
             <Image
               src="/logo_white.svg"
               alt="Logo"

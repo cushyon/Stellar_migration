@@ -6,7 +6,7 @@
 //! exposes `lastprice(Asset) -> Option<PriceData>` and
 //! `prices(Asset, u32) -> Option<Vec<PriceData>>`. Its base is `USD`, prices
 //! carry 14 decimals, and assets are keyed by ticker `Asset::Other(Symbol)`
-//! (e.g. "XLM", "USDC"). There is NO `twap` / `x_last_price` — the deviation
+//! (e.g. "XLM", "USDC"). There is NO `twap` / `x_last_price` - the deviation
 //! reference is the mean of recent `prices`, and cross-rates are computed
 //! manually. Confirm the contract id at deployment; it lives in
 //! `StrategyConfig.reflector_id`, never hardcoded.
@@ -50,7 +50,7 @@ pub trait ReflectorOracle {
 }
 
 /// Number of recent records to average for the deviation reference.
-/// PARAM: set with Wajih — do not default.
+/// PARAM: set with Wajih - do not default.
 const DEVIATION_RECORDS: u32 = 6;
 
 /// Validated price of one `asset` unit denominated in the BASE asset, scaled by
@@ -65,7 +65,7 @@ const DEVIATION_RECORDS: u32 = 6;
 ///
 /// Reverts on [`VaultError::PriceUnavailable`] (no quote / unmapped symbol /
 /// ≤0), [`VaultError::OracleStale`], or [`VaultError::OracleDeviation`]. The
-/// halt is a revert (atomic — a bad oracle can never produce a trade); it emits
+/// halt is a revert (atomic - a bad oracle can never produce a trade); it emits
 /// no event because Soroban rolls events back on revert.
 pub fn get_safe_price(e: &Env, asset: &Address) -> Result<i128, VaultError> {
     let base = storage::get_asset(e);
