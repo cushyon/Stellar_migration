@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import {
   getStellarVaultConfig,
   type StellarVaultConfig,
@@ -13,6 +13,12 @@ import { useVaultStats, useUserPosition } from "@/hooks/useVaultData";
 import { formatAmount } from "@/lib/format";
 import { StellarVaultChart } from "@/components/StellarVaultChart";
 import type { VaultStats, UserPosition } from "@/services/indexer";
+import {
+  invokeVault,
+  toBaseUnits,
+  fetchNativeBalance,
+  explorerTxUrl,
+} from "@/services/vaultTx";
 
 type ContentTab = "VaultPerformance" | "UserPerformance";
 
@@ -139,17 +145,88 @@ function UserPerformancePanel({
 }
 
 /* ── Deposit / Withdraw form ── */
-function DepositWithdrawForm({ symbol }: { symbol: string }) {
+function DepositWithdrawForm({
+  config,
+  stats,
+  position,
+}: {
+  config: StellarVaultConfig;
+  stats: VaultStats | null;
+  position: UserPosition | null;
+}) {
+  const symbol = config.asset.symbol;
+  const decimals = config.asset.decimals;
   const connected = useStellarWalletStore((s) => s.connected);
+  const address = useStellarWalletStore((s) => s.address);
   const [formType, setFormType] = useState<"deposit" | "withdraw">("deposit");
   const [inputAmount, setInputAmount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [txStatus, setTxStatus] = useState<
+    | { kind: "success"; hash: string }
+    | { kind: "error"; message: string }
+    | null
+  >(null);
   const isDeposit = formType === "deposit";
+
+  // wallet XLM balance (deposit max); position value (withdraw max)
+  const [walletBalance, setWalletBalance] = useState(0);
+  useEffect(() => {
+    if (!address) return;
+    let active = true;
+    const load = async () => {
+      const b = await fetchNativeBalance(address);
+      if (active) setWalletBalance(b);
+    };
+    load();
+    const t = setInterval(load, 15_000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [address, txStatus]);
+
+  const positionValue =
+    stats && position
+      ? (Number(BigInt(position.shares)) * stats.sharePrice) / 10 ** decimals
+      : 0;
+  // keep ~2 XLM in the wallet for reserves + fees
+  const maxAmount = isDeposit ? Math.max(walletBalance - 2, 0) : positionValue;
+
+  const amount = Number(inputAmount);
+  const canSubmit =
+    connected &&
+    !submitting &&
+    Number.isFinite(amount) &&
+    amount > 0 &&
+    amount <= maxAmount + 1e-9;
 
   const handleConnect = async () => {
     const { StellarWalletsKit } = await import(
       "@creit-tech/stellar-wallets-kit"
     );
     await StellarWalletsKit.authModal();
+  };
+
+  const handleSubmit = async () => {
+    if (!address || !canSubmit) return;
+    setSubmitting(true);
+    setTxStatus(null);
+    try {
+      const { hash } = await invokeVault(isDeposit ? "deposit" : "withdraw", {
+        contractId: config.contractId,
+        caller: address,
+        amountBase: toBaseUnits(inputAmount, decimals),
+      });
+      setTxStatus({ kind: "success", hash });
+      setInputAmount("");
+    } catch (e) {
+      setTxStatus({
+        kind: "error",
+        message: e instanceof Error ? e.message : "Transaction failed.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -189,11 +266,14 @@ function DepositWithdrawForm({ symbol }: { symbol: string }) {
         <div className="flex flex-col gap-2">
           {connected && (
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 bg-[#2a3142] rounded-sm px-2 py-0.5">
+              <button
+                onClick={() => setInputAmount(maxAmount.toFixed(2))}
+                className="flex items-center gap-1 bg-[#2a3142] rounded-sm px-2 py-0.5"
+              >
                 <span className="text-xs text-gray-400">
-                  Max: 0.00 {symbol}
+                  Max: {maxAmount.toFixed(2)} {symbol}
                 </span>
-              </div>
+              </button>
             </div>
           )}
 
@@ -211,11 +291,15 @@ function DepositWithdrawForm({ symbol }: { symbol: string }) {
           </div>
         </div>
 
-        {/* Balance row */}
+        {/* Balance row: wallet balance before -> after the pending amount */}
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-400">Balance</span>
           <span>
-            0.00 {" -> "} 0.00 {symbol}
+            {walletBalance.toFixed(2)} {" -> "}
+            {(
+              walletBalance + (Number(inputAmount) || 0) * (isDeposit ? -1 : 1)
+            ).toFixed(2)}{" "}
+            {symbol}
           </span>
         </div>
       </div>
@@ -223,13 +307,43 @@ function DepositWithdrawForm({ symbol }: { symbol: string }) {
       {/* Spacer */}
       <div className="grow h-[60px]" />
 
+      {/* tx feedback */}
+      {txStatus && (
+        <p
+          className={`mb-2 text-xs break-all ${
+            txStatus.kind === "success" ? "text-green-400" : "text-red-400"
+          }`}
+        >
+          {txStatus.kind === "success" ? (
+            <>
+              Confirmed onchain.{" "}
+              <a
+                href={explorerTxUrl(txStatus.hash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                View transaction
+              </a>
+            </>
+          ) : (
+            txStatus.message
+          )}
+        </p>
+      )}
+
       {/* CTA */}
       {connected ? (
         <Button
-          className="w-full rounded-full text-white bg-[linear-gradient(90deg,#091BCD_0%,#123FFC_35%,#0B3FE8_64%,#4571F4_100%)]"
-          disabled
+          onClick={handleSubmit}
+          className="w-full rounded-full text-white bg-[linear-gradient(90deg,#091BCD_0%,#123FFC_35%,#0B3FE8_64%,#4571F4_100%)] disabled:opacity-50"
+          disabled={!canSubmit}
         >
-          {isDeposit ? "Confirm Deposit" : "Request Withdrawal"}
+          {submitting
+            ? "Confirm in wallet…"
+            : isDeposit
+              ? "Confirm Deposit"
+              : "Request Withdrawal"}
         </Button>
       ) : (
         <Button
@@ -304,7 +418,11 @@ export default function StellarVaultPage(props: {
         )}
 
         <div className="w-full md:max-w-[400px]">
-          <DepositWithdrawForm symbol={symbol} />
+          <DepositWithdrawForm
+            config={vaultConfig}
+            stats={stats}
+            position={position}
+          />
         </div>
       </div>
     </div>
