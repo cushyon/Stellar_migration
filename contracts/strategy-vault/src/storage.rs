@@ -41,6 +41,15 @@ pub struct StrategyConfig {
     pub cooldown_period: u64,
     /// Swap allowlist - both `token_in` and `token_out` must be present.
     pub allowed_tokens: Vec<Address>,
+    /// Venue allowlist - the strategy `router` (DEX adapter) must be present.
+    /// Blocks a compromised operator from routing trades through an arbitrary
+    /// contract of their own.
+    pub allowed_routers: Vec<Address>,
+    /// Hard onchain cap on realized slippage vs the oracle price, in bps:
+    /// `amount_out` must be >= oracle-expected output * (1 - max_slippage_bps).
+    /// Backstops the operator-supplied `min_amount_out`, which can only ever be
+    /// tighter, never looser. PARAM: set with Wajih - do not default.
+    pub max_slippage_bps: u32,
 
     // --- Floor (Decision 3) -----------------------------------------------
     /// Minimum base-asset allocation, in bps of NAV (0..=10_000). A strategy

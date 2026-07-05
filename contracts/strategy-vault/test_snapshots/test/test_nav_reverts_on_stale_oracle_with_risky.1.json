@@ -151,6 +151,14 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "allowed_routers"
+                      },
+                      "val": {
+                        "vec": []
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "allowed_tokens"
                       },
                       "val": {
@@ -219,6 +227,14 @@
                       },
                       "val": {
                         "u32": 6000
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "max_slippage_bps"
+                      },
+                      "val": {
+                        "u32": 100
                       }
                     },
                     {
@@ -524,6 +540,14 @@
                         "map": [
                           {
                             "key": {
+                              "symbol": "allowed_routers"
+                            },
+                            "val": {
+                              "vec": []
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "allowed_tokens"
                             },
                             "val": {
@@ -592,6 +616,14 @@
                             },
                             "val": {
                               "u32": 6000
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "max_slippage_bps"
+                            },
+                            "val": {
+                              "u32": 100
                             }
                           },
                           {

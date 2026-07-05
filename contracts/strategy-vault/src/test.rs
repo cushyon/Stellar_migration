@@ -145,7 +145,8 @@ fn setup_strategy(e: &Env) -> StratFix {
     let mut syms: Map<Address, Symbol> = Map::new(e);
     syms.set(base.clone(), symbol_short!("XLM"));
     syms.set(risky.clone(), symbol_short!("RSK"));
-    let config = make_config(1_000_000_0000000, 60, allowed, oracle.clone(), syms);
+    let mut config = make_config(1_000_000_0000000, 60, allowed, oracle.clone(), syms);
+    config.allowed_routers.push_back(router.clone());
     vault.initialize(
         &admin,
         &base,
@@ -224,6 +225,7 @@ const TEST_FLOOR_BPS: u32 = 6_000; // 60% base-asset floor (matches the vault na
 const TEST_DEVIATION_BPS: u32 = 500; // 5% lastprice-vs-twap halt threshold
 const TEST_STALENESS: u64 = 3_600; // 1h max price age
 const TEST_DECIMALS_OFFSET: u32 = 3; // virtual-share offset (hardened over 0)
+const TEST_MAX_SLIPPAGE_BPS: u32 = 100; // 1% hard onchain cap vs oracle price
 const PRICE_SCALE: i128 = 100_000_000_000_000; // 10^14, oracle price decimals
 
 /// Build a `StrategyConfig` for tests. Fee bps default to 0 (Tranche-1 inert).
@@ -238,7 +240,9 @@ fn make_config(
     StrategyConfig {
         max_trade_size,
         cooldown_period: cooldown,
+        allowed_routers: Vec::new(allowed.env()),
         allowed_tokens: allowed,
+        max_slippage_bps: TEST_MAX_SLIPPAGE_BPS,
         floor_bps: TEST_FLOOR_BPS,
         reflector_id,
         asset_symbols,
@@ -613,6 +617,11 @@ fn test_strategy_trade_size_exceeded() {
     setup!(e, token_addr, sac, tc, vault_addr, vault, admin, op, user);
     let router = Address::generate(&e);
 
+    // Allowlist the router so the trade-size cap is the check under test.
+    let mut cfg = vault.get_config();
+    cfg.allowed_routers.push_back(router.clone());
+    vault.set_config(&cfg);
+
     vault.deposit(&user, &1_000_0000000i128, &user);
 
     // Exceed max trade size (default 1,000,000 tokens)
@@ -793,6 +802,50 @@ fn test_strategy_slippage_rejected() {
     router.set_out(&40_0000000i128); // delivers 40 < min 50
     vault.execute_strategy(
         &f.op, &f.router, &f.base, &f.risky, &100_0000000i128, &50_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
+    );
+}
+
+/// A compromised operator must not be able to route through a contract of
+/// their own: the venue (router) is allowlisted like the tokens are.
+#[test]
+#[should_panic(expected = "Error(Contract, #29)")] // RouterNotAllowed
+fn test_strategy_unlisted_router_rejected() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let oracle = MockReflectorClient::new(&e, &f.oracle);
+
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    oracle.set(&symbol_short!("RSK"), &(2 * PRICE_SCALE), &(2 * PRICE_SCALE), &100_000u64);
+
+    // Registered and funded, but never allowlisted in the config.
+    let rogue_router = e.register(MockRouter, ());
+    MockRouterClient::new(&e, &rogue_router).set_out(&50_0000000i128);
+    vault.execute_strategy(
+        &f.op, &rogue_router, &f.base, &f.risky, &100_0000000i128, &50_0000000i128, &0u64,
+        &200_000u64, &Vec::new(&e),
+    );
+}
+
+/// The oracle slippage cap is a protocol bound the operator cannot loosen: a
+/// colluding `min_amount_out` of 1 must not let a bad fill through. Fair out
+/// is 50 (oracle: 1 risky = 2 base); the router delivers 40 (-20%), far past
+/// the 1% cap.
+#[test]
+#[should_panic(expected = "Error(Contract, #43)")] // SlippageCapExceeded
+fn test_strategy_oracle_slippage_cap_rejected() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let oracle = MockReflectorClient::new(&e, &f.oracle);
+    let router = MockRouterClient::new(&e, &f.router);
+
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    oracle.set(&symbol_short!("RSK"), &(2 * PRICE_SCALE), &(2 * PRICE_SCALE), &100_000u64);
+    router.set_out(&40_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.base, &f.risky, &100_0000000i128, &1i128, &0u64, &200_000u64,
+        &Vec::new(&e),
     );
 }
 

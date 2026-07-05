@@ -1,7 +1,7 @@
 use soroban_sdk::{contractclient, token, Address, Env, Vec};
 
 use crate::errors::VaultError;
-use crate::{events, storage, vault};
+use crate::{events, oracle, storage, vault};
 
 /// Generic DEX router surface the vault swaps through. For Tranche 1 this is a
 /// placeholder interface exercised by a mock in tests; real Soroswap/Phoenix
@@ -17,9 +17,9 @@ pub trait Router {
 /// Execute a strategy trade with the full set of onchain safeguards.
 ///
 /// Order (cheap/authorization checks first, then the trade, then post-trade
-/// invariants): auth → nonce → deadline → token allowlist → trade-size cap →
-/// cooldown → swap → slippage → floor guardrail → commit (nonce++, cooldown,
-/// event).
+/// invariants): auth → nonce → deadline → token allowlist → router allowlist →
+/// trade-size cap → cooldown → swap → operator slippage floor → oracle
+/// slippage cap → floor guardrail → commit (nonce++, cooldown, event).
 #[allow(clippy::too_many_arguments)]
 pub fn execute(
     e: &Env,
@@ -57,12 +57,18 @@ pub fn execute(
         return Err(VaultError::TokenNotAllowed);
     }
 
-    // 5. Trade-size cap.
+    // 5. Venue allowlist: the router must be a vetted DEX adapter, or a
+    //    compromised operator could route through a contract of their own.
+    if !config.allowed_routers.contains(&router) {
+        return Err(VaultError::RouterNotAllowed);
+    }
+
+    // 6. Trade-size cap.
     if amount_in > config.max_trade_size {
         return Err(VaultError::TradeSizeExceeded);
     }
 
-    // 6. Cooldown.
+    // 7. Cooldown.
     let last_trade = storage::get_last_trade_time(e);
     if now < last_trade + config.cooldown_period {
         return Err(VaultError::CooldownNotElapsed);
@@ -73,19 +79,39 @@ pub fn execute(
     // bad price can never be used to clear the floor check below.
     let nav_before = vault::total_assets(e);
 
-    // 7. Swap through the router and measure realized output.
+    // 8. Swap through the router and measure realized output.
     let balance_out_before = token::Client::new(e, &token_out).balance(&contract);
     token::Client::new(e, &token_in).transfer(&contract, &router, &amount_in);
     let _reported = RouterClient::new(e, &router).swap(&token_in, &token_out, &amount_in, &contract);
     let balance_out_after = token::Client::new(e, &token_out).balance(&contract);
     let amount_out = balance_out_after - balance_out_before;
 
-    // 8. Slippage - realized output must meet the operator's floor.
+    // 9. Slippage - realized output must meet the operator's floor.
     if amount_out < min_amount_out {
         return Err(VaultError::SlippageExceeded);
     }
 
-    // 9. Floor guardrail (Decision 3): base allocation must stay ≥ floor_bps of
+    // 10. Onchain slippage cap: realized output must also clear the
+    //     oracle-implied minimum. A hard protocol bound the operator cannot
+    //     loosen (a colluding `min_amount_out` of 1 changes nothing here).
+    //     expected_out = amount_in * price_in / price_out (both oracle-valued
+    //     in base units, PRICE_SCALE cancels).
+    let price_in = oracle::get_safe_price(e, &token_in)?;
+    let price_out = oracle::get_safe_price(e, &token_out)?;
+    let expected_out = amount_in
+        .checked_mul(price_in)
+        .ok_or(VaultError::MathOverflow)?
+        / price_out;
+    let cap_bps = config.max_slippage_bps.min(10_000) as i128;
+    let min_allowed = expected_out
+        .checked_mul(10_000 - cap_bps)
+        .ok_or(VaultError::MathOverflow)?
+        / 10_000;
+    if amount_out < min_allowed {
+        return Err(VaultError::SlippageCapExceeded);
+    }
+
+    // 11. Floor guardrail (Decision 3): base allocation must stay ≥ floor_bps of
     //    NAV after the trade. Blocks a trade that de-risks below the protected
     //    floor at execution time.
     let nav_after = vault::total_assets(e);
@@ -99,7 +125,7 @@ pub fn execute(
         return Err(VaultError::FloorBreached);
     }
 
-    // 10. Commit.
+    // 12. Commit.
     storage::set_last_trade_time(e, now);
     storage::set_nonce(e, expected_nonce + 1);
     events::strategy(
