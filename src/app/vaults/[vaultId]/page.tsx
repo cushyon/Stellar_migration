@@ -115,12 +115,15 @@ function UserPerformancePanel({
   const shares = position ? BigInt(position.shares) : BigInt(0);
   const currentValue =
     stats && position ? (Number(shares) * stats.sharePrice) / 10 ** decimals : 0;
-  const deposited = position
-    ? Number(BigInt(position.deposited ?? "0")) / 10 ** decimals
-    : 0;
-  const pnl = currentValue - deposited;
-  const pnlPct = deposited > 0 ? (pnl / deposited) * 100 : 0;
-  const pnlColor = pnl >= 0 ? "text-green-400" : "text-red-400";
+  // deposited missing from the API response = unknown cost basis (stale
+  // indexer) - show "-" rather than a fabricated 0 (which fakes a +100% P&L).
+  const hasCostBasis = position != null && position.deposited != null;
+  const deposited = hasCostBasis
+    ? Number(BigInt(position.deposited)) / 10 ** decimals
+    : null;
+  const pnl = deposited != null ? currentValue - deposited : null;
+  const pnlPct = pnl != null && deposited! > 0 ? (pnl / deposited!) * 100 : null;
+  const pnlColor = (pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400";
 
   return (
     <div className="flex flex-col w-full gap-6">
@@ -130,7 +133,7 @@ function UserPerformancePanel({
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">Deposited</span>
             <span>
-              {formatQty(deposited)} {symbol}
+              {deposited != null ? `${formatQty(deposited)} ${symbol}` : "-"}
             </span>
           </div>
           <div className="flex flex-col gap-1">
@@ -142,12 +145,14 @@ function UserPerformancePanel({
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">P&L</span>
             <span className={pnlColor}>
-              {formatQty(pnl)} {symbol}
+              {pnl != null ? `${formatQty(pnl)} ${symbol}` : "-"}
             </span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">P&L %</span>
-            <span className={pnlColor}>{pnlPct.toFixed(2)}%</span>
+            <span className={pnlColor}>
+              {pnlPct != null ? `${pnlPct.toFixed(2)}%` : "-"}
+            </span>
           </div>
         </div>
       </div>
