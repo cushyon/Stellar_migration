@@ -10,7 +10,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import useStellarWalletStore from "@/stores/useStellarWalletStore";
 import { useVaultStats, useUserPosition } from "@/hooks/useVaultData";
-import { formatAmount } from "@/lib/format";
+import { formatAmount, formatQty } from "@/lib/format";
 import { StellarVaultChart } from "@/components/StellarVaultChart";
 import type { VaultStats, UserPosition } from "@/services/indexer";
 import {
@@ -127,7 +127,7 @@ function UserPerformancePanel({
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">Current Value</span>
             <span>
-              {currentValue.toFixed(2)} {symbol}
+              {formatQty(currentValue)} {symbol}
             </span>
           </div>
           <div className="flex flex-col gap-1">
@@ -271,7 +271,7 @@ function DepositWithdrawForm({
                 className="flex items-center gap-1 bg-[#2a3142] rounded-sm px-2 py-0.5"
               >
                 <span className="text-xs text-gray-400">
-                  Max: {maxAmount.toFixed(2)} {symbol}
+                  Max: {formatQty(maxAmount)} {symbol}
                 </span>
               </button>
             </div>
@@ -295,10 +295,10 @@ function DepositWithdrawForm({
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-400">Balance</span>
           <span>
-            {walletBalance.toFixed(2)} {" -> "}
-            {(
+            {formatQty(walletBalance)} {" -> "}
+            {formatQty(
               walletBalance + (Number(inputAmount) || 0) * (isDeposit ? -1 : 1)
-            ).toFixed(2)}{" "}
+            )}{" "}
             {symbol}
           </span>
         </div>

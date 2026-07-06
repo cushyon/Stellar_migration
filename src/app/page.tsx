@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function Home() {
-  redirect("/vaults/test-vault-1");
+  redirect("/vaults/cushion");
 }

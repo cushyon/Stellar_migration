@@ -12,6 +12,14 @@ export function formatAmount(value: string | bigint, decimals: number, dp = 2): 
   return n.toFixed(dp);
 }
 
+/** Human token quantity with thousands separators, e.g. 10000 → "10,000.00". */
+export function formatQty(n: number, dp = 2): string {
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: dp,
+    maximumFractionDigits: dp,
+  });
+}
+
 /** A fractional return (e.g. 0.0514) → "+5.14%" / "-2.10%" / "-" when null. */
 export function formatPct(ret: number | null | undefined): string {
   if (ret == null) return "-";

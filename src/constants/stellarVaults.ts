@@ -18,7 +18,7 @@ export type StellarVaultConfig = {
 
 const STELLAR_VAULT_1: StellarVaultConfig = {
   name: "XLM Capital Protected",
-  vaultId: "test-vault-1",
+  vaultId: "cushion",
   // Testnet deployment (real Reflector oracle wired).
   contractId: "CAH4EGSDBIEJB5TQFH4Q37372UJBY27UN2UBF426YDR2IUVJWACJLBAE",
   description:
