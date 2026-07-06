@@ -1,5 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { vaultStats, vaultHistory, userPositions } from "./metrics.js";
+import {
+  vaultStats,
+  vaultHistory,
+  userPositions,
+  userPositionHistory,
+} from "./metrics.js";
 import { getPriceHistory } from "./prices.js";
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -24,6 +29,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/users/:address/positions", async (req) => {
     const { address } = req.params as { address: string };
     return userPositions(address);
+  });
+
+  // Position value time series for one address in one vault. ?range=7d|30d|90d|all
+  app.get("/users/:address/vaults/:id/history", async (req) => {
+    const { address, id } = req.params as { address: string; id: string };
+    const { range } = req.query as { range?: string };
+    return userPositionHistory(id, address, range ?? "30d");
   });
 
   // Stored USD price history for a ticker (accumulated from the Reflector
