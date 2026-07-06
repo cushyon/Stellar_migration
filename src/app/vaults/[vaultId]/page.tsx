@@ -9,7 +9,11 @@ import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import useStellarWalletStore from "@/stores/useStellarWalletStore";
-import { useVaultStats, useUserPosition } from "@/hooks/useVaultData";
+import {
+  useVaultStats,
+  useUserPosition,
+  refreshVaultDataAfterTx,
+} from "@/hooks/useVaultData";
 import { formatAmount, formatQty } from "@/lib/format";
 import { StellarVaultChart } from "@/components/StellarVaultChart";
 import { UserPositionChart } from "@/components/UserPositionChart";
@@ -242,6 +246,9 @@ function DepositWithdrawForm({
       });
       setTxStatus({ kind: "success", hash });
       setInputAmount("");
+      // tx -> indexer cron -> API poll takes up to ~45s; burst-refresh so the
+      // dashboard picks the new snapshot up as soon as the indexer writes it.
+      refreshVaultDataAfterTx();
     } catch (e) {
       setTxStatus({
         kind: "error",

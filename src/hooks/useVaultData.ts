@@ -16,6 +16,23 @@ import {
 
 const REFRESH_MS = 15_000;
 
+// Data flows tx -> indexer cron -> API poll, so a confirmed tx can take up to
+// cron+poll (~45s) to show up. Hooks subscribe here; after a confirmed tx the
+// form fires a refresh burst that picks the new snapshot up within seconds.
+const listeners = new Set<() => void>();
+function subscribeRefresh(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+export function refreshVaultData(): void {
+  listeners.forEach((fn) => fn());
+}
+/** Immediate refresh + a burst covering the indexer's next cron ticks. */
+export function refreshVaultDataAfterTx(): void {
+  refreshVaultData();
+  [5, 12, 20, 32, 45].forEach((s) => setTimeout(refreshVaultData, s * 1000));
+}
+
 export function useVaultStats(contractId: string) {
   const [stats, setStats] = useState<VaultStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,9 +48,11 @@ export function useVaultStats(contractId: string) {
     };
     load();
     const t = setInterval(load, REFRESH_MS);
+    const unsub = subscribeRefresh(load);
     return () => {
       active = false;
       clearInterval(t);
+      unsub();
     };
   }, [contractId]);
 
@@ -51,9 +70,11 @@ export function useVaultHistory(contractId: string, range: string) {
     };
     load();
     const t = setInterval(load, REFRESH_MS);
+    const unsub = subscribeRefresh(load);
     return () => {
       active = false;
       clearInterval(t);
+      unsub();
     };
   }, [contractId, range]);
 
@@ -71,9 +92,11 @@ export function usePriceHistory(symbol: string, days: number) {
     };
     load();
     const t = setInterval(load, REFRESH_MS);
+    const unsub = subscribeRefresh(load);
     return () => {
       active = false;
       clearInterval(t);
+      unsub();
     };
   }, [symbol, days]);
 
@@ -99,9 +122,11 @@ export function useUserPositionHistory(
     };
     load();
     const t = setInterval(load, REFRESH_MS);
+    const unsub = subscribeRefresh(load);
     return () => {
       active = false;
       clearInterval(t);
+      unsub();
     };
   }, [contractId, address, range]);
 
@@ -123,9 +148,11 @@ export function useUserPosition(contractId: string, address: string | null) {
     };
     load();
     const t = setInterval(load, REFRESH_MS);
+    const unsub = subscribeRefresh(load);
     return () => {
       active = false;
       clearInterval(t);
+      unsub();
     };
   }, [contractId, address]);
 
