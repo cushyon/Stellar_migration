@@ -12,6 +12,7 @@ import useStellarWalletStore from "@/stores/useStellarWalletStore";
 import { useVaultStats, useUserPosition } from "@/hooks/useVaultData";
 import { formatAmount, formatQty } from "@/lib/format";
 import { StellarVaultChart } from "@/components/StellarVaultChart";
+import { UserPositionChart } from "@/components/UserPositionChart";
 import type { VaultStats, UserPosition } from "@/services/indexer";
 import {
   invokeVault,
@@ -109,11 +110,17 @@ function UserPerformancePanel({
   const symbol = config.asset.symbol;
   const decimals = config.asset.decimals;
 
-  // Current value = shares × share price (base units); cost basis isn't tracked
-  // onchain, so Deposited / P&L stay at the design's placeholder.
+  // Current value = shares × share price; cost basis = net contributed
+  // (deposits - withdrawals), both from the indexer.
   const shares = position ? BigInt(position.shares) : BigInt(0);
   const currentValue =
     stats && position ? (Number(shares) * stats.sharePrice) / 10 ** decimals : 0;
+  const deposited = position
+    ? Number(BigInt(position.deposited ?? "0")) / 10 ** decimals
+    : 0;
+  const pnl = currentValue - deposited;
+  const pnlPct = deposited > 0 ? (pnl / deposited) * 100 : 0;
+  const pnlColor = pnl >= 0 ? "text-green-400" : "text-red-400";
 
   return (
     <div className="flex flex-col w-full gap-6">
@@ -122,7 +129,9 @@ function UserPerformancePanel({
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">Deposited</span>
-            <span>0.00 {symbol}</span>
+            <span>
+              {formatQty(deposited)} {symbol}
+            </span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">Current Value</span>
@@ -132,14 +141,23 @@ function UserPerformancePanel({
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">P&L</span>
-            <span className="text-gray-500">0.00 {symbol}</span>
+            <span className={pnlColor}>
+              {formatQty(pnl)} {symbol}
+            </span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">P&L %</span>
-            <span className="text-gray-500">0.00%</span>
+            <span className={pnlColor}>{pnlPct.toFixed(2)}%</span>
           </div>
         </div>
       </div>
+
+      {/* Position value history (parity with the product's depositor graph) */}
+      <UserPositionChart
+        contractId={config.contractId}
+        symbol={symbol}
+        decimals={decimals}
+      />
     </div>
   );
 }
@@ -258,8 +276,8 @@ function DepositWithdrawForm({
       <div className="flex flex-col gap-4 mt-4">
         <p className="text-sm text-gray-400">
           {isDeposit
-            ? "Deposited funds are subject to a 1 day redemption period."
-            : "After the 1 day redemption period, your funds can be withdrawn to your wallet."}
+            ? "Deposit XLM to receive vault shares. Withdrawals are instant and permissionless - your funds are never locked."
+            : "Withdrawals are instant and permissionless - your funds are sent straight to your wallet, even if the strategy backend is offline."}
         </p>
 
         {/* Input */}
@@ -343,7 +361,7 @@ function DepositWithdrawForm({
             ? "Confirm in wallet…"
             : isDeposit
               ? "Confirm Deposit"
-              : "Request Withdrawal"}
+              : "Confirm Withdrawal"}
         </Button>
       ) : (
         <Button

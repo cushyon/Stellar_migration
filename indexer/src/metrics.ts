@@ -79,12 +79,86 @@ export async function vaultHistory(vaultId: string, range: string) {
   }));
 }
 
+/// Position value over time: shares held at each snapshot × that snapshot's
+/// share price (base units). The share timeline is rebuilt from the indexed
+/// share-moving events (deposit/withdraw/transfer/burn), in TOID order.
+export async function userPositionHistory(
+  vaultId: string,
+  address: string,
+  range: string
+) {
+  const snaps = await vaultHistory(vaultId, range);
+  if (snaps.length === 0) return [];
+
+  const events = await prisma.stellarEvent.findMany({
+    where: {
+      contractId: vaultId,
+      type: { in: ["deposit", "withdraw", "transfer", "burn"] },
+    },
+    orderBy: { id: "asc" },
+    select: { type: true, ts: true, topic: true, data: true },
+  });
+
+  // shares delta per event for this address (deposit/withdraw carry
+  // [assets, shares]; transfer/burn carry the share amount alone)
+  const deltas: { at: number; d: bigint }[] = [];
+  for (const ev of events) {
+    const topic = ev.topic as string[];
+    const raw = ev.data as unknown;
+    const arr = Array.isArray(raw) ? (raw as string[]) : [String(raw)];
+    const at = ev.ts.getTime();
+    if (ev.type === "deposit" && topic[2] === address) {
+      deltas.push({ at, d: BigInt(arr[1] ?? "0") });
+    } else if (ev.type === "withdraw" && topic[1] === address) {
+      deltas.push({ at, d: -BigInt(arr[1] ?? "0") });
+    } else if (ev.type === "transfer") {
+      const amt = BigInt(arr[0] ?? "0");
+      if (topic[1] === address) deltas.push({ at, d: -amt });
+      if (topic[2] === address) deltas.push({ at, d: amt });
+    } else if (ev.type === "burn" && topic[1] === address) {
+      deltas.push({ at, d: -BigInt(arr[0] ?? "0") });
+    }
+  }
+
+  let i = 0;
+  let shares = BigInt(0);
+  return snaps.map((s) => {
+    const at = new Date(s.ts).getTime();
+    while (i < deltas.length && deltas[i].at <= at) {
+      shares += deltas[i].d;
+      i++;
+    }
+    return { ts: s.ts, value: Number(shares) * s.sharePrice };
+  });
+}
+
 export async function userPositions(address: string) {
   const rows = await prisma.userPosition.findMany({ where: { address } });
-  return rows.map((r) => ({
-    vault: r.vault,
-    address: r.address,
-    shares: r.shares.toString(),
-    updatedAt: r.updatedAt,
-  }));
+  return Promise.all(
+    rows.map(async (r) => {
+      // Cost basis = net assets contributed, from the indexed events:
+      // deposits credit the share receiver (topic[2]), withdrawals debit the
+      // owner (topic[1]). Share transfers between wallets are not attributed
+      // (out of scope for now).
+      const events = await prisma.stellarEvent.findMany({
+        where: { contractId: r.vault, type: { in: ["deposit", "withdraw"] } },
+        select: { type: true, topic: true, data: true },
+      });
+      let deposited = BigInt(0);
+      for (const ev of events) {
+        const topic = ev.topic as string[];
+        const data = ev.data as string[];
+        const assets = BigInt(data[0] ?? "0");
+        if (ev.type === "deposit" && topic[2] === address) deposited += assets;
+        if (ev.type === "withdraw" && topic[1] === address) deposited -= assets;
+      }
+      return {
+        vault: r.vault,
+        address: r.address,
+        shares: r.shares.toString(),
+        deposited: deposited.toString(), // net contributed, base units
+        updatedAt: r.updatedAt,
+      };
+    })
+  );
 }

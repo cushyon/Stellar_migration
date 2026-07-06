@@ -25,6 +25,7 @@ export interface UserPosition {
   vault: string;
   address: string;
   shares: string; // base units (i128 as string)
+  deposited: string; // net assets contributed (deposits - withdrawals), base units
   updatedAt: string;
 }
 
@@ -56,6 +57,28 @@ export async function fetchVaultHistory(
 export interface PricePoint {
   ts: number; // unix seconds
   price: number; // USD
+}
+
+export interface PositionHistoryPoint {
+  ts: string;
+  value: number; // position value, base units (shares × share price)
+}
+
+export async function fetchUserPositionHistory(
+  contractId: string,
+  address: string,
+  range: string
+): Promise<PositionHistoryPoint[]> {
+  try {
+    const res = await fetch(
+      `${BASE}/users/${address}/vaults/${contractId}/history?range=${range}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    return (await res.json()) as PositionHistoryPoint[];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchPriceHistory(symbol: string, days: number): Promise<PricePoint[]> {
