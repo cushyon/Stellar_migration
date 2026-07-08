@@ -111,7 +111,7 @@ pub fn execute(
         return Err(VaultError::SlippageCapExceeded);
     }
 
-    // 11. Floor guardrail (Decision 3): base allocation must stay ≥ floor_bps of
+    // 11. Floor guardrail: base allocation must stay ≥ floor_bps of
     //    NAV after the trade. Blocks a trade that de-risks below the protected
     //    floor at execution time.
     let nav_after = vault::total_assets(e);

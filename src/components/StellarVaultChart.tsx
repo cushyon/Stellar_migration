@@ -11,9 +11,17 @@ import {
   YAxis,
   Tooltip,
   ReferenceLine,
+  ReferenceDot,
   type TooltipProps,
 } from "recharts";
-import { gradientStops, niceScale, LINE_COLOR, AREA_COLOR } from "@/lib/graph";
+import {
+  gradientStops,
+  niceScale,
+  currentValueLabel,
+  LINE_COLOR,
+  AREA_COLOR,
+  SURFACE_COLOR,
+} from "@/lib/graph";
 import { useVaultHistory, usePriceHistory } from "@/hooks/useVaultData";
 
 // UIVaultCushion theme (globals.css .dark): grid --stroke-secondary, axes --container-border.
@@ -117,6 +125,7 @@ export function StellarVaultChart({
   const values = data.map((d) => d.value);
   const minY = values.length ? Math.min(...values) : 0;
   const maxY = values.length ? Math.max(...values) : 0;
+  const last = data.length ? data[data.length - 1] : null;
 
   // Round domain + round ticks (Heckbert nice-numbers). ROI charts centre 0
   // (symmetric); others pad a band.
@@ -197,6 +206,22 @@ export function StellarVaultChart({
                 fill={`url(#${AREA_ID})`}
                 stroke={LINE_COLOR}
               />
+              {/* live marker: right after a tx the new level is sub-pixel wide
+                  on a multi-day axis, so pin the latest value on its point. */}
+              {last && (
+                <ReferenceDot
+                  x={last.ts}
+                  y={last.value}
+                  r={4}
+                  fill={LINE_COLOR}
+                  stroke={SURFACE_COLOR}
+                  strokeWidth={2}
+                  isFront
+                  label={currentValueLabel(
+                    `${fmtValue(type, last.value)}${type === "tvl" ? ` ${symbol}` : ""}`
+                  )}
+                />
+              )}
               <XAxis
                 dataKey="ts"
                 tickMargin={8}

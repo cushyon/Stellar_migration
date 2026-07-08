@@ -5,6 +5,40 @@ import type { ReactNode } from "react";
 //   --chart-area-neutral               = hsl(0 0% 0%)     → area fill.
 export const LINE_COLOR = "hsl(55, 89%, 51%)";
 export const AREA_COLOR = "hsl(0, 0%, 0%)";
+// Chart card surface (tailwind neutral-900) - dot ring + label halo.
+export const SURFACE_COLOR = "hsl(0, 0%, 9%)";
+
+/**
+ * `label` renderer for the current-value ReferenceDot. The dot sits on the
+ * plot's right edge, so the text is drawn to its left (a right-side label
+ * would clip), with a surface-colored halo to stay legible over grid lines.
+ * recharts passes the dot's bounding box as `viewBox` ({x: cx-r, y: cy-r,
+ * width: 2r, height: 2r}).
+ */
+export function currentValueLabel(text: string) {
+  return function CurrentValueLabel(props: {
+    viewBox?: { x?: number; y?: number; width?: number; height?: number };
+  }) {
+    const box = props.viewBox ?? {};
+    const cx = (box.x ?? 0) + (box.width ?? 0) / 2;
+    const cy = (box.y ?? 0) + (box.height ?? 0) / 2;
+    return (
+      <text
+        x={cx - 10}
+        y={cy + 4}
+        textAnchor="end"
+        fontSize={12}
+        fontWeight={600}
+        fill={LINE_COLOR}
+        stroke={SURFACE_COLOR}
+        strokeWidth={4}
+        paintOrder="stroke"
+      >
+        {text}
+      </text>
+    );
+  };
+}
 
 /** Vertical gradient stops of a single color with start/end opacity (area fill). */
 export function gradientStops(color: string, startOpacity = 1, endOpacity = 1): ReactNode {
