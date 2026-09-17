@@ -1,0 +1,36 @@
+[project]
+name = "cushion-cppi-engine"
+version = "0.1.0"
+description = "CPPI strategy with ratchet steps for the Cushion Stellar vault (risky XLM, safe USDC)"
+requires-python = ">=3.13,<3.14"
+# Exact pins, each release at least 7 days old when pinned (supply-chain guard).
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
+    "pydantic==2.13.5",
+    "python-dotenv==1.2.3",
+]
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+pytest = "9.1.1"
+pytest-env = "1.7.1"
+httpx = "0.28.1"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# Test values only (the legacy Solana parameters). Production values: PARAM, set with Wajih.
+env = [
+    "ENVIRONMENT=test",
+    "CPPI_FLOOR=0.6",
+    "CPPI_MULTIPLIER=8",
+    "CPPI_PROFIT_LOCKIN=0.19",
+    "CPPI_LIMIT_ORDER_SAFETY=1.02",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
