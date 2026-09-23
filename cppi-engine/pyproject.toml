@@ -19,6 +19,15 @@ pytest = "9.1.1"
 pytest-env = "1.7.1"
 httpx = "0.28.1"
 
+# Backtest only (not in the server image): poetry install --with backtest
+[tool.poetry.group.backtest]
+optional = true
+
+[tool.poetry.group.backtest.dependencies]
+pandas = "3.0.5"
+numpy = "2.5.3"
+matplotlib = "3.11.1"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
