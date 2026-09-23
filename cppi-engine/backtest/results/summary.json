@@ -1,0 +1,414 @@
+[
+  {
+    "safe_yield": 0.0,
+    "period": [
+      "2023-09-01 00:00:00+00:00",
+      "2026-08-31 23:45:00+00:00"
+    ],
+    "best_sol_method": {
+      "multiplier": 3.0,
+      "floor": 0.6,
+      "profit_lockin": 0.01
+    },
+    "best_score": 24,
+    "tied_sets": 2655,
+    "grid_sets": 7068,
+    "tied_range": {
+      "multiplier": [
+        3.0,
+        8.5
+      ],
+      "floor": [
+        0.6,
+        0.9
+      ],
+      "profit_lockin": [
+        0.01,
+        0.19
+      ]
+    },
+    "tied_top_by_mean_sortino": [
+      {
+        "multiplier": 3.5,
+        "floor": 0.6,
+        "profit_lockin": 0.18,
+        "score": 24,
+        "mean_sharpe": 0.875,
+        "mean_sortino": 1.636,
+        "mean_final_nav": 259.17,
+        "worst_hour_final_nav": 224.16,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.5,
+        "floor": 0.9,
+        "profit_lockin": 0.19,
+        "score": 24,
+        "mean_sharpe": 0.669,
+        "mean_sortino": 1.629,
+        "mean_final_nav": 154.35,
+        "worst_hour_final_nav": 128.82,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.0,
+        "floor": 0.6,
+        "profit_lockin": 0.19,
+        "score": 24,
+        "mean_sharpe": 0.884,
+        "mean_sortino": 1.611,
+        "mean_final_nav": 250.01,
+        "worst_hour_final_nav": 212.42,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.5,
+        "floor": 0.6,
+        "profit_lockin": 0.19,
+        "score": 24,
+        "mean_sharpe": 0.872,
+        "mean_sortino": 1.61,
+        "mean_final_nav": 255.65,
+        "worst_hour_final_nav": 213.87,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.0,
+        "floor": 0.6,
+        "profit_lockin": 0.18,
+        "score": 24,
+        "mean_sharpe": 0.879,
+        "mean_sortino": 1.607,
+        "mean_final_nav": 248.49,
+        "worst_hour_final_nav": 222.43,
+        "breach_events": 0,
+        "days_below_floor": 0
+      }
+    ],
+    "tied_top_by_mean_sharpe": [
+      {
+        "multiplier": 3.0,
+        "floor": 0.6,
+        "profit_lockin": 0.19,
+        "score": 24,
+        "mean_sharpe": 0.884,
+        "mean_sortino": 1.611,
+        "mean_final_nav": 250.01,
+        "worst_hour_final_nav": 212.42,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.0,
+        "floor": 0.63,
+        "profit_lockin": 0.18,
+        "score": 24,
+        "mean_sharpe": 0.88,
+        "mean_sortino": 1.572,
+        "mean_final_nav": 238.57,
+        "worst_hour_final_nav": 207.4,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.0,
+        "floor": 0.6,
+        "profit_lockin": 0.18,
+        "score": 24,
+        "mean_sharpe": 0.879,
+        "mean_sortino": 1.607,
+        "mean_final_nav": 248.49,
+        "worst_hour_final_nav": 222.43,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.0,
+        "floor": 0.61,
+        "profit_lockin": 0.19,
+        "score": 24,
+        "mean_sharpe": 0.878,
+        "mean_sortino": 1.584,
+        "mean_final_nav": 245.38,
+        "worst_hour_final_nav": 213.41,
+        "breach_events": 0,
+        "days_below_floor": 0
+      },
+      {
+        "multiplier": 3.0,
+        "floor": 0.61,
+        "profit_lockin": 0.18,
+        "score": 24,
+        "mean_sharpe": 0.877,
+        "mean_sortino": 1.585,
+        "mean_final_nav": 244.96,
+        "worst_hour_final_nav": 207.78,
+        "breach_events": 0,
+        "days_below_floor": 0
+      }
+    ],
+    "reference_sets": {
+      "legacy_code_2025_04": {
+        "multiplier": 8.0,
+        "floor": 0.6,
+        "profit_lockin": 0.19,
+        "score": 9,
+        "mean_sharpe": 0.236,
+        "mean_sortino": 0.277,
+        "mean_final_nav": 119.02,
+        "worst_hour_final_nav": 80.82,
+        "breach_events": 24,
+        "days_below_floor": 16421
+      },
+      "sol_backtest_2025_04": {
+        "multiplier": 8.0,
+        "floor": 0.6,
+        "profit_lockin": 0.16,
+        "score": 11,
+        "mean_sharpe": 0.179,
+        "mean_sortino": 0.209,
+        "mean_final_nav": 111.36,
+        "worst_hour_final_nav": 77.75,
+        "breach_events": 24,
+        "days_below_floor": 15977
+      },
+      "sol_backtest_2025_05": {
+        "multiplier": 8.5,
+        "floor": 0.69,
+        "profit_lockin": 0.13,
+        "score": 2,
+        "mean_sharpe": 0.071,
+        "mean_sortino": 0.048,
+        "mean_final_nav": 95.62,
+        "worst_hour_final_nav": 83.76,
+        "breach_events": 24,
+        "days_below_floor": 17779
+      }
+    },
+    "best_sharpe_hour": 5,
+    "best_sortino_hour": 18,
+    "hour_16": {
+      "hour": 16,
+      "final_nav": 212.92,
+      "final_xlm": 155.7,
+      "final_safe": 100.0,
+      "beats_safe": true,
+      "sharpe": 0.752,
+      "sortino": 1.625,
+      "nav_max_drawdown": -0.2963,
+      "xlm_max_drawdown": -0.7497,
+      "breach_events": 0,
+      "days_below_floor": 0
+    }
+  },
+  {
+    "safe_yield": 0.06,
+    "period": [
+      "2023-09-01 00:00:00+00:00",
+      "2026-08-31 23:45:00+00:00"
+    ],
+    "best_sol_method": {
+      "multiplier": 3.0,
+      "floor": 0.6,
+      "profit_lockin": 0.01
+    },
+    "best_score": 24,
+    "tied_sets": 5408,
+    "grid_sets": 7068,
+    "tied_range": {
+      "multiplier": [
+        3.0,
+        8.5
+      ],
+      "floor": [
+        0.6,
+        0.9
+      ],
+      "profit_lockin": [
+        0.01,
+        0.19
+      ]
+    },
+    "tied_top_by_mean_sortino": [
+      {
+        "multiplier": 8.5,
+        "floor": 0.9,
+        "profit_lockin": 0.01,
+        "score": 24,
+        "mean_sharpe": 1.336,
+        "mean_sortino": 3.403,
+        "mean_final_nav": 270.2,
+        "worst_hour_final_nav": 124.58,
+        "breach_events": 119,
+        "days_below_floor": 1911
+      },
+      {
+        "multiplier": 8.5,
+        "floor": 0.9,
+        "profit_lockin": 0.02,
+        "score": 24,
+        "mean_sharpe": 1.328,
+        "mean_sortino": 3.398,
+        "mean_final_nav": 276.49,
+        "worst_hour_final_nav": 123.57,
+        "breach_events": 118,
+        "days_below_floor": 1962
+      },
+      {
+        "multiplier": 8.5,
+        "floor": 0.89,
+        "profit_lockin": 0.01,
+        "score": 24,
+        "mean_sharpe": 1.318,
+        "mean_sortino": 3.389,
+        "mean_final_nav": 282.68,
+        "worst_hour_final_nav": 122.65,
+        "breach_events": 117,
+        "days_below_floor": 1971
+      },
+      {
+        "multiplier": 8.5,
+        "floor": 0.87,
+        "profit_lockin": 0.02,
+        "score": 24,
+        "mean_sharpe": 1.301,
+        "mean_sortino": 3.389,
+        "mean_final_nav": 310.67,
+        "worst_hour_final_nav": 122.72,
+        "breach_events": 115,
+        "days_below_floor": 2056
+      },
+      {
+        "multiplier": 8.5,
+        "floor": 0.89,
+        "profit_lockin": 0.04,
+        "score": 24,
+        "mean_sharpe": 1.301,
+        "mean_sortino": 3.382,
+        "mean_final_nav": 299.92,
+        "worst_hour_final_nav": 122.65,
+        "breach_events": 117,
+        "days_below_floor": 2031
+      }
+    ],
+    "tied_top_by_mean_sharpe": [
+      {
+        "multiplier": 8.5,
+        "floor": 0.9,
+        "profit_lockin": 0.01,
+        "score": 24,
+        "mean_sharpe": 1.336,
+        "mean_sortino": 3.403,
+        "mean_final_nav": 270.2,
+        "worst_hour_final_nav": 124.58,
+        "breach_events": 119,
+        "days_below_floor": 1911
+      },
+      {
+        "multiplier": 8.5,
+        "floor": 0.9,
+        "profit_lockin": 0.02,
+        "score": 24,
+        "mean_sharpe": 1.328,
+        "mean_sortino": 3.398,
+        "mean_final_nav": 276.49,
+        "worst_hour_final_nav": 123.57,
+        "breach_events": 118,
+        "days_below_floor": 1962
+      },
+      {
+        "multiplier": 8.0,
+        "floor": 0.9,
+        "profit_lockin": 0.01,
+        "score": 24,
+        "mean_sharpe": 1.324,
+        "mean_sortino": 3.369,
+        "mean_final_nav": 260.2,
+        "worst_hour_final_nav": 121.55,
+        "breach_events": 96,
+        "days_below_floor": 1409
+      },
+      {
+        "multiplier": 8.5,
+        "floor": 0.89,
+        "profit_lockin": 0.01,
+        "score": 24,
+        "mean_sharpe": 1.318,
+        "mean_sortino": 3.389,
+        "mean_final_nav": 282.68,
+        "worst_hour_final_nav": 122.65,
+        "breach_events": 117,
+        "days_below_floor": 1971
+      },
+      {
+        "multiplier": 8.5,
+        "floor": 0.9,
+        "profit_lockin": 0.03,
+        "score": 24,
+        "mean_sharpe": 1.316,
+        "mean_sortino": 3.344,
+        "mean_final_nav": 280.06,
+        "worst_hour_final_nav": 124.58,
+        "breach_events": 119,
+        "days_below_floor": 1956
+      }
+    ],
+    "reference_sets": {
+      "legacy_code_2025_04": {
+        "multiplier": 8.0,
+        "floor": 0.6,
+        "profit_lockin": 0.19,
+        "score": 23,
+        "mean_sharpe": 0.932,
+        "mean_sortino": 1.554,
+        "mean_final_nav": 316.4,
+        "worst_hour_final_nav": 99.44,
+        "breach_events": 84,
+        "days_below_floor": 2606
+      },
+      "sol_backtest_2025_04": {
+        "multiplier": 8.0,
+        "floor": 0.6,
+        "profit_lockin": 0.16,
+        "score": 23,
+        "mean_sharpe": 0.923,
+        "mean_sortino": 1.538,
+        "mean_final_nav": 312.12,
+        "worst_hour_final_nav": 93.35,
+        "breach_events": 82,
+        "days_below_floor": 2538
+      },
+      "sol_backtest_2025_05": {
+        "multiplier": 8.5,
+        "floor": 0.69,
+        "profit_lockin": 0.13,
+        "score": 23,
+        "mean_sharpe": 1.063,
+        "mean_sortino": 1.831,
+        "mean_final_nav": 386.1,
+        "worst_hour_final_nav": 96.35,
+        "breach_events": 98,
+        "days_below_floor": 3565
+      }
+    },
+    "best_sharpe_hour": 5,
+    "best_sortino_hour": 18,
+    "hour_16": {
+      "hour": 16,
+      "final_nav": 237.85,
+      "final_xlm": 155.7,
+      "final_safe": 119.08,
+      "beats_safe": true,
+      "sharpe": 0.86,
+      "sortino": 1.834,
+      "nav_max_drawdown": -0.2877,
+      "xlm_max_drawdown": -0.7497,
+      "breach_events": 0,
+      "days_below_floor": 0
+    }
+  }
+]
