@@ -17,9 +17,12 @@ Changes from the SOL script:
 6. New outputs: ties at the best score, a second ranking of the tied sets, floor breach events,
    days below the floor, max drawdown, XLM buy and hold, and the Solana parameter sets for comparison.
 
-Run from cppi-engine/: poetry run python backtest/run_backtest.py
+Run from cppi-engine/:
+  poetry run python backtest/run_backtest.py                                    # 2023-2026
+  poetry run python backtest/run_backtest.py --data backtest/data/xlmusdt_15m_2018_2026.csv
 """
 
+import argparse
 import json
 from itertools import product
 from pathlib import Path
@@ -32,7 +35,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 
-DATA = Path(__file__).parent / "data" / "xlmusdt_15m.csv"
+DEFAULT_DATA = Path(__file__).parent / "data" / "xlmusdt_15m_2023_2026.csv"
 RESULTS = Path(__file__).parent / "results"
 
 SAFE_YIELDS = [0.0, 0.06]  # 0% = idle USDC in the vault, 6% = the SOL backtest value
@@ -55,8 +58,8 @@ TOP_TIED = 5  # tied sets to list in the second ranking
 
 
 # 1. Prices
-def load_prices(safe_yield):
-    df = pd.read_csv(DATA, parse_dates=["open_time"]).set_index("open_time")
+def load_prices(safe_yield, data):
+    df = pd.read_csv(data, parse_dates=["open_time"]).set_index("open_time")
     prices = df.rename(columns={"open": "Risky"})[["Risky"]]
     years = (prices.index - prices.index[0]).total_seconds() / (DAYS_PER_YEAR * 24 * 3600)
     prices["Safe"] = prices["Risky"].iloc[0] * (1 + safe_yield) ** np.asarray(years)
@@ -189,10 +192,10 @@ def max_drawdown(series):
 
 
 # 4. Grid search and report for one safe yield
-def run_backtest(safe_yield):
-    label = f"safe{round(safe_yield * 100)}"
-    print(f"\n=== XLM CPPI backtest, safe yield {safe_yield:.0%} ===")
-    prices = load_prices(safe_yield)
+def run_backtest(safe_yield, data, period):
+    label = f"{period}_safe{round(safe_yield * 100)}"
+    print(f"\n=== XLM CPPI backtest {period}, safe yield {safe_yield:.0%} ===")
+    prices = load_prices(safe_yield, data)
 
     grid = list(product(MULTIPLIERS, FLOORS, PROFIT_LOCKINS))
     grid_m = np.array([g[0] for g in grid])
@@ -379,7 +382,14 @@ def run_backtest(safe_yield):
 
 # 5. Run the complete backtest
 if __name__ == "__main__":
-    summaries = [run_backtest(safe_yield) for safe_yield in SAFE_YIELDS]
-    with open(RESULTS / "summary.json", "w") as f:
+    parser = argparse.ArgumentParser(description="XLM CPPI backtest with ratchet steps")
+    parser.add_argument("--data", type=Path, default=DEFAULT_DATA, help="price CSV from fetch_prices.py")
+    parser.add_argument("--label", help="period label for the file names (default: taken from the CSV name)")
+    args = parser.parse_args()
+    # xlmusdt_15m_2023_2026.csv -> 2023_2026
+    period = args.label or "_".join(args.data.stem.split("_")[-2:])
+
+    summaries = [run_backtest(safe_yield, args.data, period) for safe_yield in SAFE_YIELDS]
+    with open(RESULTS / f"summary_{period}.json", "w") as f:
         json.dump(summaries, f, indent=2)
     print(f"\nReports saved in {RESULTS}")
