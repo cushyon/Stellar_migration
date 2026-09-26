@@ -23,13 +23,40 @@ async function startLedgerFor(latest: number): Promise<number> {
 /// One ingest cycle: scan from the last-ingested ledger, dedup on event id
 /// (TOID) via a unique insert, and maintain user_position. Returns the count of
 /// newly-inserted events. Idempotent: re-running ingests zero duplicates.
+/// Ask the RPC for one event page at `start`. If it answers that the ledger is
+/// out of its range, it names the range, and the first number of that range is
+/// the oldest ledger it still serves.
+async function oldestAvailableLedger(start: number, latest: number): Promise<number> {
+  try {
+    await server.getEvents({
+      startLedger: start,
+      filters: [{ type: "contract" as const, contractIds: [config.vaultId] }],
+      limit: 1,
+    });
+    return start;
+  } catch (e) {
+    const match = /ledger range:\s*(\d+)\s*-\s*(\d+)/.exec((e as Error).message ?? "");
+    if (!match) throw e;
+    return Math.min(Number(match[1]), latest);
+  }
+}
+
 export async function ingestOnce(log?: {
   info: (m: string) => void;
   error: (m: string) => void;
 }): Promise<number> {
   const latest = await latestLedger();
-  const start = await startLedgerFor(latest);
+  let start = await startLedgerFor(latest);
   if (start > latest) return 0;
+
+  // The RPC keeps only a few days of ledgers. After a long stop, the stored
+  // cursor falls out of that window, so the scan restarts at the oldest ledger
+  // the RPC still has. The events in between are lost, so say it in the log.
+  const oldest = await oldestAvailableLedger(start, latest);
+  if (oldest > start) {
+    log?.error(`[ingest] cursor ${start} is older than the RPC window; restarting at ${oldest}`);
+    start = oldest;
+  }
 
   let inserted = 0;
   let scannedTo = start - 1;

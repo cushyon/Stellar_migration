@@ -16,19 +16,24 @@
   "dependencies": {
     "@fastify/cors": "^10.0.1",
     "@prisma/client": "^6.2.1",
-    "@stellar/stellar-sdk": "^13.3.0",
+    "@stellar/stellar-sdk": "^17.1.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "node-cron": "^3.0.3"
   },
   "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/node-cron": "^3.0.11",
     "prisma": "^6.2.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "@types/node": "^22.10.5",
-    "@types/node-cron": "^3.0.11"
+    "typescript": "^5.7.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "prisma", "esbuild"]
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild"
+    ]
   }
 }
