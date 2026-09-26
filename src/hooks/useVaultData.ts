@@ -7,11 +7,15 @@ import {
   fetchVaultHistory,
   fetchPriceHistory,
   fetchUserPositionHistory,
+  fetchVaultRisk,
+  fetchStrategyRuns,
   type VaultStats,
   type UserPosition,
   type VaultHistoryPoint,
   type PricePoint,
   type PositionHistoryPoint,
+  type VaultRisk,
+  type StrategyRun,
 } from "@/services/indexer";
 
 const REFRESH_MS = 15_000;
@@ -157,4 +161,48 @@ export function useUserPosition(contractId: string, address: string | null) {
   }, [contractId, address]);
 
   return position;
+}
+
+export function useVaultRisk(contractId: string) {
+  const [risk, setRisk] = useState<VaultRisk | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const r = await fetchVaultRisk(contractId);
+      if (active) setRisk(r);
+    };
+    load();
+    const t = setInterval(load, REFRESH_MS);
+    const unsub = subscribeRefresh(load);
+    return () => {
+      active = false;
+      clearInterval(t);
+      unsub();
+    };
+  }, [contractId]);
+
+  return risk;
+}
+
+export function useStrategyRuns(contractId: string, limit = 8) {
+  const [runs, setRuns] = useState<StrategyRun[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const r = await fetchStrategyRuns(contractId, limit);
+      if (active) setRuns(r);
+    };
+    load();
+    const t = setInterval(load, REFRESH_MS);
+    const unsub = subscribeRefresh(load);
+    return () => {
+      active = false;
+      clearInterval(t);
+      unsub();
+    };
+  }, [contractId, limit]);
+
+  return runs;
 }

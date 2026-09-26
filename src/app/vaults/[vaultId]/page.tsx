@@ -12,12 +12,16 @@ import useStellarWalletStore from "@/stores/useStellarWalletStore";
 import {
   useVaultStats,
   useUserPosition,
+  useVaultRisk,
+  useStrategyRuns,
   refreshVaultDataAfterTx,
 } from "@/hooks/useVaultData";
 import { formatAmount, formatQty } from "@/lib/format";
 import { StellarVaultChart } from "@/components/StellarVaultChart";
 import { UserPositionChart } from "@/components/UserPositionChart";
-import type { VaultStats, UserPosition } from "@/services/indexer";
+import type { VaultStats, UserPosition, VaultRisk, StrategyRun } from "@/services/indexer";
+import { AllocationBar } from "@/components/AllocationBar";
+import { StrategyActivity } from "@/components/StrategyActivity";
 import {
   invokeVault,
   toBaseUnits,
@@ -59,14 +63,20 @@ function StatCard({
 function VaultPerformancePanel({
   config,
   stats,
+  risk,
+  runs,
 }: {
   config: StellarVaultConfig;
   stats: VaultStats | null;
+  risk: VaultRisk | null;
+  runs: StrategyRun[];
 }) {
   const symbol = config.asset.symbol;
   const decimals = config.asset.decimals;
   // Prefer return-since-inception (defined from day one) over the trailing
   // windows, which are null until the vault is old enough.
+  // The last trade the vault actually accepted, not a promised cadence.
+  const lastRebalance = lastAcceptedTrade(runs);
   const roi =
     stats?.performance.inception ??
     stats?.performance.apy ??
@@ -88,7 +98,7 @@ function VaultPerformancePanel({
           suffix={symbol}
         />
         <StatCard label="Protection floor" value={`${config.floorBps / 100}`} suffix="%" />
-        <StatCard label="Rebalancing" value="1" suffix="Day" />
+        <StatCard label="Last rebalance" value={lastRebalance.value} suffix={lastRebalance.suffix} />
       </div>
 
       {/* Performance chart (the product) */}
@@ -97,8 +107,28 @@ function VaultPerformancePanel({
         symbol={symbol}
         decimals={decimals}
       />
+
+      <AllocationBar
+        stats={stats}
+        risk={risk}
+        symbol={symbol}
+        decimals={decimals}
+        floorBps={config.floorBps}
+      />
+
+      <StrategyActivity runs={runs} risk={risk} symbol={symbol} decimals={decimals} />
     </div>
   );
+}
+
+/** Time since the last trade the vault accepted, for the stats row. */
+function lastAcceptedTrade(runs: StrategyRun[]): { value: string; suffix?: string } {
+  const last = runs.find((r) => r.status === "submitted");
+  if (!last) return { value: "-" };
+  const hours = (Date.now() - new Date(last.ts).getTime()) / 3_600_000;
+  if (hours < 1) return { value: Math.max(1, Math.round(hours * 60)).toString(), suffix: "min ago" };
+  if (hours < 48) return { value: Math.round(hours).toString(), suffix: "h ago" };
+  return { value: Math.round(hours / 24).toString(), suffix: "d ago" };
 }
 
 /* ── User Performance panel ── */
@@ -151,6 +181,10 @@ function UserPerformancePanel({
             <span className={pnlColor}>
               {pnl != null ? `${formatQty(pnl)} ${symbol}` : "-"}
             </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-gray-400">Shares</span>
+            <span>{formatQty(Number(shares) / 10 ** decimals)}</span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">P&L %</span>
@@ -398,6 +432,10 @@ export default function StellarVaultPage(props: {
   // Hooks run unconditionally (before any early return) - fall back to "" id.
   const { stats } = useVaultStats(vaultConfig?.contractId ?? "");
   const position = useUserPosition(vaultConfig?.contractId ?? "", address);
+  const risk = useVaultRisk(vaultConfig?.contractId ?? "");
+  // Enough rows that the last trades are in the window: a quiet keeper writes
+  // one "hold" row per cycle.
+  const runs = useStrategyRuns(vaultConfig?.contractId ?? "", 60);
 
   const [activeTab, setActiveTab] = useState<ContentTab>("VaultPerformance");
 
@@ -437,7 +475,7 @@ export default function StellarVaultPage(props: {
       {/* Content + Form */}
       <div className="flex flex-col md:flex-row w-full gap-6 mt-4">
         {activeTab === "VaultPerformance" && (
-          <VaultPerformancePanel config={vaultConfig} stats={stats} />
+          <VaultPerformancePanel config={vaultConfig} stats={stats} risk={risk} runs={runs} />
         )}
         {activeTab === "UserPerformance" && (
           <UserPerformancePanel

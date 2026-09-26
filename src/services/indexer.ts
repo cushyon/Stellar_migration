@@ -110,3 +110,57 @@ export async function fetchUserPositions(address: string): Promise<UserPosition[
     return [];
   }
 }
+
+export interface VaultRisk {
+  vault: string;
+  ts: string;
+  nav: string;
+  sharePrice: number;
+  basePct: number; // base allocation, 0..1
+  floorPct: number; // floor the contract enforces, 0..1
+  cushionPct: number; // basePct - floorPct
+  oracleOk: boolean;
+  paused: boolean;
+  alerts: string[];
+}
+
+export interface StrategyRun {
+  id: number;
+  vault: string;
+  ts: string;
+  action: "hold" | "buy_risky" | "sell_risky";
+  status: "skipped" | "dry_run" | "submitted" | "rejected" | "unknown";
+  targetRiskyPct: number | null;
+  actualRiskyPct: number | null;
+  amountIn: string | null;
+  minOut: string | null;
+  nonce: number | null;
+  txHash: string | null;
+  errorCode: number | null;
+  detail: string | null;
+}
+
+/** Latest risk picture of the vault. Null while the keeper has written none. */
+export async function fetchVaultRisk(contractId: string): Promise<VaultRisk | null> {
+  try {
+    const res = await fetch(`${BASE}/vaults/${contractId}/risk`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { latest: VaultRisk };
+    return body.latest;
+  } catch {
+    return null;
+  }
+}
+
+/** Recent strategy decisions, newest first. */
+export async function fetchStrategyRuns(contractId: string, limit = 8): Promise<StrategyRun[]> {
+  try {
+    const res = await fetch(`${BASE}/vaults/${contractId}/strategy-runs?limit=${limit}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    return (await res.json()) as StrategyRun[];
+  } catch {
+    return [];
+  }
+}
