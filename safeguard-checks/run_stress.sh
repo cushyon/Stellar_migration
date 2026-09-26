@@ -176,7 +176,9 @@ send "$VAULT" unpause --caller "$OPERATOR"
 # --- put the vault back ----------------------------------------------------
 price "$ONE"
 sell_all_risky
-send "$VAULT" set_config --config "$(config "$REFLECTOR" 300 6000)"
+# Back to the product settings. The ticker goes back to XLM, because Reflector
+# has no quote for the test token and the vault must stay able to price it.
+send "$VAULT" set_config --config "$(echo "$(config "$REFLECTOR" 300 6000)" | sed "s/\"$TST\":\"TST\"/\"$TST\":\"XLM\"/")"
 report "vault restored" "0.0% risky, Reflector back" "$(allocation)% risky"
 
 echo
