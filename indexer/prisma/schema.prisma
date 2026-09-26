@@ -71,3 +71,57 @@ model PriceSnapshot {
   @@index([symbol, ts])
   @@map("price_snapshot")
 }
+
+/// Strategy state that the CPPI engine needs between runs, per vault. The
+/// engine is stateless: the keeper stores the inception share price and the
+/// high-water share price, and sends them on every call.
+model StrategyState {
+  vault              String   @id
+  initialSharePrice  Float    @map("initial_share_price")
+  maxSharePrice      Float    @map("max_share_price")
+  lastLimitOrderPrice Float?  @map("last_limit_order_price")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("strategy_state")
+}
+
+/// One keeper decision. It records the proposal even when the keeper does not
+/// send it (no drift, cooldown, dry run) and the vault answer when it does.
+model StrategyRun {
+  id         Int      @id @default(autoincrement())
+  vault      String
+  ts         DateTime @default(now())
+  action     String // hold | buy_risky | sell_risky
+  status     String // skipped | dry_run | submitted | rejected | unknown
+  targetRiskyPct Float?  @map("target_risky_pct")
+  actualRiskyPct Float?  @map("actual_risky_pct")
+  amountIn   Decimal? @db.Decimal(40, 0) @map("amount_in")
+  minOut     Decimal? @db.Decimal(40, 0) @map("min_out")
+  nonce      Int?
+  txHash     String?  @map("tx_hash")
+  errorCode  Int?     @map("error_code")
+  detail     String?
+
+  @@index([vault, ts])
+  @@map("strategy_run")
+}
+
+/// Risk picture of one cycle: how far the vault is from its floor, whether the
+/// oracle answers, and whether the vault is paused.
+model RiskSnapshot {
+  id           Int      @id @default(autoincrement())
+  vault        String
+  ts           DateTime @default(now())
+  nav          Decimal  @db.Decimal(40, 0)
+  sharePrice   Float    @map("share_price")
+  basePct      Float    @map("base_pct")
+  floorPct     Float    @map("floor_pct")
+  cushionPct   Float    @map("cushion_pct")
+  oracleAgeSec Int?     @map("oracle_age_sec")
+  oracleOk     Boolean  @map("oracle_ok")
+  paused       Boolean
+  alerts       String[] @default([])
+
+  @@index([vault, ts])
+  @@map("risk_snapshot")
+}

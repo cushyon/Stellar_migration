@@ -6,6 +6,7 @@ import { registerRoutes } from "./routes.js";
 import { ingestOnce } from "./ingest.js";
 import { takeSnapshot } from "./snapshot.js";
 import { recordReflectorPrices } from "./prices.js";
+import { runKeeper } from "./keeper.js";
 
 async function main() {
   const app = Fastify({ logger: true });
@@ -22,6 +23,7 @@ async function main() {
       await ingestOnce(app.log);
       await takeSnapshot(app.log);
       await recordReflectorPrices("XLM", app.log);
+      await runKeeper(app.log);
     } catch (e) {
       app.log.error(e, "[poller] cycle failed");
     } finally {

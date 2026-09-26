@@ -6,6 +6,7 @@ import {
   userPositionHistory,
 } from "./metrics.js";
 import { getPriceHistory } from "./prices.js";
+import { prisma } from "./db.js";
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/health", async () => ({ ok: true }));
@@ -36,6 +37,30 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const { address, id } = req.params as { address: string; id: string };
     const { range } = req.query as { range?: string };
     return userPositionHistory(id, address, range ?? "30d");
+  });
+
+  // Risk picture of the last cycles: distance to the floor, oracle, pause state.
+  app.get("/vaults/:id/risk", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { limit } = req.query as { limit?: string };
+    const rows = await prisma.riskSnapshot.findMany({
+      where: { vault: id },
+      orderBy: { ts: "desc" },
+      take: Math.min(Number(limit ?? "1"), 200),
+    });
+    if (rows.length === 0) return reply.code(404).send({ error: "no risk snapshot yet" });
+    return { latest: rows[0], history: rows };
+  });
+
+  // Keeper decisions, newest first: what it proposed and what the vault answered.
+  app.get("/vaults/:id/strategy-runs", async (req) => {
+    const { id } = req.params as { id: string };
+    const { limit } = req.query as { limit?: string };
+    return prisma.strategyRun.findMany({
+      where: { vault: id },
+      orderBy: { ts: "desc" },
+      take: Math.min(Number(limit ?? "50"), 500),
+    });
   });
 
   // Stored USD price history for a ticker (accumulated from the Reflector

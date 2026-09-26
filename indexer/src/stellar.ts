@@ -79,3 +79,82 @@ export function toNative(v: unknown): unknown {
   if (typeof v === "string") return scValToNative(xdr.ScVal.fromXDR(v, "base64"));
   return scValToNative(v as xdr.ScVal);
 }
+
+/// Error code of a contract revert, for example `Error(Contract, #26)` -> 26.
+export function contractErrorCode(message: string): number | null {
+  const match = /Error\(Contract, #(\d+)\)/.exec(message);
+  return match ? Number(match[1]) : null;
+}
+
+/// A contract call that did not go through. `submitted` says whether the
+/// transaction reached the network: after that point the trade may be onchain,
+/// so a caller must never report it as rejected.
+export class ContractCallError extends Error {
+  constructor(
+    message: string,
+    readonly code: number | null,
+    readonly submitted: boolean,
+    readonly hash?: string
+  ) {
+    super(message);
+    this.name = "ContractCallError";
+  }
+}
+
+/// Sign and send a contract call, then wait for the result. The source account
+/// signs, so a `require_auth` on that address needs no extra signature.
+export async function invokeContract(
+  contractId: string,
+  method: string,
+  args: xdr.ScVal[],
+  secret: string
+): Promise<{ hash: string }> {
+  const keypair = Keypair.fromSecret(secret);
+  const account = await server.getAccount(keypair.publicKey());
+  const tx = new TransactionBuilder(account, {
+    fee: config.keeper.feeStroops,
+    networkPassphrase: config.networkPassphrase,
+  })
+    .addOperation(new Contract(contractId).call(method, ...args))
+    .setTimeout(config.keeper.deadlineSeconds)
+    .build();
+
+  // Before this point nothing reaches the network, so a failure here is a
+  // rejection: the vault refused the call.
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) {
+    const message = `simulate ${method} failed: ${sim.error}`;
+    throw new ContractCallError(message, contractErrorCode(sim.error), false);
+  }
+
+  const prepared = rpc.assembleTransaction(tx, sim).build();
+  prepared.sign(keypair);
+
+  const sent = await server.sendTransaction(prepared);
+  if (sent.status === "ERROR") {
+    throw new ContractCallError(`send ${method} failed`, null, false, sent.hash);
+  }
+
+  // From here the transaction is on the network. Any later error is about
+  // reading the result, not about the trade.
+  const deadline = Date.now() + config.keeper.confirmTimeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const got = await server.getTransaction(sent.hash);
+      if (got.status === rpc.Api.GetTransactionStatus.SUCCESS) return { hash: sent.hash };
+      if (got.status === rpc.Api.GetTransactionStatus.FAILED) {
+        throw new ContractCallError(`tx failed onchain`, null, true, sent.hash);
+      }
+    } catch (e) {
+      if (e instanceof ContractCallError) throw e;
+      throw new ContractCallError(
+        `sent, but the result could not be read: ${(e as Error).message}`,
+        null,
+        true,
+        sent.hash
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new ContractCallError("sent, but not confirmed in time", null, true, sent.hash);
+}
