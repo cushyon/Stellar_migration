@@ -42,10 +42,23 @@ export const config = {
     deadlineSeconds: Number(process.env.KEEPER_DEADLINE_SECONDS ?? "120"),
     // Wait after a rejection instead of sending the same proposal again.
     rejectBackoffSeconds: Number(process.env.KEEPER_REJECT_BACKOFF_SECONDS ?? "300"),
+    // Alert about a sent but unconfirmed trade only while it is this recent.
+    unconfirmedAlertHours: Number(process.env.KEEPER_UNCONFIRMED_ALERT_HOURS ?? "24"),
     confirmTimeoutMs: Number(process.env.KEEPER_CONFIRM_TIMEOUT_MS ?? "60000"),
     feeStroops: process.env.KEEPER_FEE_STROOPS ?? "1000000",
     // Alert when the base allocation is less than this above the floor.
     cushionAlertPct: Number(process.env.KEEPER_CUSHION_ALERT_PCT ?? "0.05"),
+  },
+
+  // Where the alerts go. Without a channel they stay in the service log.
+  alerts: {
+    label: process.env.ALERT_LABEL ?? "cushion-testnet",
+    telegramBotToken: process.env.ALERT_TELEGRAM_BOT_TOKEN ?? "",
+    telegramChatId: process.env.ALERT_TELEGRAM_CHAT_ID ?? "",
+    webhookUrl: process.env.ALERT_WEBHOOK_URL ?? "",
+    timeoutMs: Number(process.env.ALERT_TIMEOUT_MS ?? "8000"),
+    // An alert that stays true is repeated at most this often.
+    repeatMinutes: Number(process.env.ALERT_REPEAT_MINUTES ?? "60"),
   },
 };
 

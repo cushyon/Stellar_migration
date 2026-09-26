@@ -125,3 +125,21 @@ model RiskSnapshot {
   @@index([vault, ts])
   @@map("risk_snapshot")
 }
+
+/// One row per alert that is open or was open. The keeper sends a message when
+/// an alert appears, a reminder at most every `ALERT_REPEAT_MINUTES`, and one
+/// message when it clears. The row survives a restart, so a restart does not
+/// send the same alert again.
+model AlertState {
+  id         String    @id // vault + key
+  vault      String
+  key        String
+  message    String
+  active     Boolean   @default(true)
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSentAt DateTime? @map("last_sent_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  @@index([vault, active])
+  @@map("alert_state")
+}

@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { readContract, addressArg, invokeContract, ContractCallError } from "./stellar.js";
 import { askEngine } from "./engine.js";
 import { takeRiskSnapshot } from "./risk.js";
+import type { Alert } from "./alerts.js";
 
 const PRICE_SCALE = 1e14; // the vault returns prices with 14 decimals
 
@@ -59,7 +60,22 @@ export async function runKeeper(log?: Log): Promise<void> {
     }
   }
 
-  const risk = await takeRiskSnapshot(vault, log);
+  // A run that was sent but never confirmed needs a person to check the hash.
+  // Only recent ones: an old row stays "unknown" for ever, and an alert that
+  // never clears is an alert that nobody reads.
+  const pending = await prisma.strategyRun.findFirst({
+    where: {
+      vault,
+      status: "unknown",
+      ts: { gte: new Date(Date.now() - config.keeper.unconfirmedAlertHours * 3_600_000) },
+    },
+    orderBy: { ts: "desc" },
+  });
+  const extraAlerts: Alert[] = pending
+    ? [{ key: "unconfirmed_trade", message: `a trade was sent but not confirmed: tx ${pending.txHash ?? "unknown"}` }]
+    : [];
+
+  const risk = await takeRiskSnapshot(vault, log, extraAlerts);
   if (risk.paused) return hold(vault, "vault is paused", log);
   if (!risk.oracleOk) return hold(vault, "oracle unavailable", log);
   if (risk.supply === 0n) return hold(vault, "vault has no shares", log);
