@@ -45,16 +45,30 @@ export async function runKeeper(log?: Log): Promise<void> {
     }
   }
 
+  // After a rejection, wait instead of sending the same proposal again. A vault
+  // that refuses a trade now usually refuses the same trade one cycle later.
+  const lastRun = await prisma.strategyRun.findFirst({ where: { vault }, orderBy: { ts: "desc" } });
+  if (lastRun?.status === "rejected" && config.keeper.rejectBackoffSeconds > 0) {
+    const elapsed = (Date.now() - lastRun.ts.getTime()) / 1000;
+    if (elapsed < config.keeper.rejectBackoffSeconds) {
+      log?.info(
+        `[keeper] backoff after error ${lastRun.errorCode ?? "unknown"}: ` +
+          `${Math.round(config.keeper.rejectBackoffSeconds - elapsed)}s left`
+      );
+      return;
+    }
+  }
+
   const risk = await takeRiskSnapshot(vault, log);
-  if (risk.paused) return record(vault, "hold", "skipped", { detail: "vault is paused" });
-  if (!risk.oracleOk) return record(vault, "hold", "skipped", { detail: "oracle unavailable" });
-  if (risk.supply === 0n) return record(vault, "hold", "skipped", { detail: "vault has no shares" });
+  if (risk.paused) return hold(vault, "vault is paused", log);
+  if (!risk.oracleOk) return hold(vault, "oracle unavailable", log);
+  if (risk.supply === 0n) return hold(vault, "vault has no shares", log);
 
   // Price of one risky unit in base units, from the vault itself, so the keeper
   // and the contract value the leg the same way.
   const riskyPrice =
     Number((await readContract(vault, "safe_price", [addressArg(risky)])) as bigint) / PRICE_SCALE;
-  if (!(riskyPrice > 0)) return record(vault, "hold", "skipped", { detail: "risky price is zero" });
+  if (!(riskyPrice > 0)) return hold(vault, "risky price is zero", log);
 
   const riskyBalance = BigInt(
     (await readContract(risky, "balance", [addressArg(vault)])) as bigint
@@ -96,7 +110,7 @@ export async function runKeeper(log?: Log): Promise<void> {
   };
 
   if (driftPct * 10_000 < config.keeper.driftBps) {
-    return record(vault, "hold", "skipped", { ...common, detail: `drift ${(driftPct * 100).toFixed(2)}% below the threshold` });
+    return hold(vault, `drift ${(driftPct * 100).toFixed(2)}% below the threshold`, log, common);
   }
 
   // Direction: buy the risky leg with base, or sell it back to base.
@@ -109,7 +123,7 @@ export async function runKeeper(log?: Log): Promise<void> {
   const maxTrade = BigInt(cfg.max_trade_size);
   let amountIn = BigInt(Math.floor(Math.abs(delta) / priceIn));
   if (amountIn > maxTrade) amountIn = maxTrade;
-  if (amountIn <= 0n) return record(vault, "hold", "skipped", { ...common, detail: "amount rounds to zero" });
+  if (amountIn <= 0n) return hold(vault, "amount rounds to zero", log, common);
 
   const expectedOut = (Number(amountIn) * priceIn) / priceOut;
   const minOut = BigInt(Math.floor((expectedOut * (10_000 - config.keeper.slippageBps)) / 10_000));
@@ -157,6 +171,18 @@ export async function runKeeper(log?: Log): Promise<void> {
       detail: message.slice(0, 300),
     });
   }
+}
+
+/// No trade this cycle. It is logged and stored, so a quiet keeper can be told
+/// apart from a keeper that never ran.
+async function hold(
+  vault: string,
+  reason: string,
+  log?: Log,
+  common: { targetRiskyPct?: number; actualRiskyPct?: number } = {}
+): Promise<void> {
+  log?.info(`[keeper] hold: ${reason}`);
+  await record(vault, "hold", "skipped", { ...common, detail: reason });
 }
 
 async function loadState(vault: string, sharePrice: number) {

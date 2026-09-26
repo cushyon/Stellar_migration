@@ -40,6 +40,8 @@ export const config = {
     // Room under the oracle price for min_amount_out.
     slippageBps: Number(process.env.KEEPER_SLIPPAGE_BPS ?? "50"),
     deadlineSeconds: Number(process.env.KEEPER_DEADLINE_SECONDS ?? "120"),
+    // Wait after a rejection instead of sending the same proposal again.
+    rejectBackoffSeconds: Number(process.env.KEEPER_REJECT_BACKOFF_SECONDS ?? "300"),
     confirmTimeoutMs: Number(process.env.KEEPER_CONFIRM_TIMEOUT_MS ?? "60000"),
     feeStroops: process.env.KEEPER_FEE_STROOPS ?? "1000000",
     // Alert when the base allocation is less than this above the floor.
