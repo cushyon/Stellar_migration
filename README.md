@@ -4,6 +4,9 @@ Capital-protected strategy vaults on Stellar. This repo contains:
 
 - A **Next.js frontend** - vault dashboard, wallet connection, deposit/withdraw UI
 - A **Soroban smart contract** - SEP-41 token + SEP-56 vault with on-chain strategy safety checks
+- An **indexer** - Fastify API and poller that turns onchain events into vault metrics
+- A **strategy engine** - Python service that computes the capital-protected allocation, with its backtest
+- **Safeguard checks** - scripts that verify the onchain guardrails against a deployed vault
 
 ## Architecture overview
 
@@ -47,6 +50,16 @@ contracts/
       errors.rs               → Error enum
       test.rs                 → 63 tests (~96% coverage)
     Cargo.toml                → Soroban SDK 26.1.0 + OZ Pausable
+  test-router/                → Testnet-only adapter for the safeguard checks (not a DEX)
+  test-oracle/                → Testnet-only mock SEP-40 feed for the safeguard checks
+
+cppi-engine/                  → Strategy engine (FastAPI): CPPI allocation with ratchet steps
+  strategy.py                 → cppi_strategy(), ratchet_floor()
+  main.py                     → POST /strategy/stellar, GET /health
+  backtest/                   → Binance price download + grid backtest, results as PDF/CSV
+  tests/                      → Strategy math and API tests
+
+safeguard-checks/             → Scripts that check the onchain guardrails on testnet
 ```
 
 ## Smart contract
@@ -149,6 +162,41 @@ pnpm dev                      # Fastify on :8080, polls every CRON_INTERVAL_SECO
 
 Set `NEXT_PUBLIC_INDEXER_URL` (default `http://localhost:8080`) for the frontend. Env vars: see `indexer/.env.example`.
 
+## Strategy engine (`cppi-engine/`)
+
+A FastAPI service that computes the target allocation. It holds no keys and moves no funds: the orchestrator sends the vault state, and the engine answers with percentages and a limit order price. The vault enforces its own rules onchain whatever the engine returns.
+
+**CPPI with ratchet steps.** The risky exposure is `multiplier x cushion`, where the cushion is the value above the protected floor. Each gain of `profit_lockin x initial capital` raises the floor by one step, and the floor never comes down.
+
+- `POST /strategy/stellar` - body: `price_risky`, `price_safe`, `nav`, `max_nav`, `risky_amount`, `safe_amount`, `initial_capital`. It returns the target percentages, the limit order price, and the values the caller must store (`newMaxNav`, `floorValue`, `ratchetSteps`).
+- The four risk parameters come only from the environment. The service refuses to start without them, so a deployment always states them.
+
+```sh
+cd cppi-engine
+poetry install
+cp .env.example .env          # set the four CPPI_* values
+poetry run pytest
+poetry run uvicorn main:app
+```
+
+**Backtest (`cppi-engine/backtest/`).** `fetch_prices.py` downloads XLM candles from Binance for a fixed period, and `run_backtest.py` runs the strategy at each of the 24 rebalance hours over a parameter grid, for a safe leg at 0% and at 6%. It writes a PDF per case, a CSV of every parameter set, and a JSON summary under `backtest/results/`. The tests check that the vectorized backtest gives the same result as the engine that ships.
+
+```sh
+poetry install --with backtest
+poetry run python backtest/run_backtest.py
+```
+
+## Safeguard checks (`safeguard-checks/`)
+
+Scripts that call the deployed vault with one broken input at a time and check that it rejects the call with the expected error code.
+
+- `run_checks.sh` - runs against the product vault. It only simulates, so it changes nothing.
+- `run_scenarios.sh` - runs against a separate test vault and covers every guardrail, plus the emergency pause and one accepted swap. It restores the vault at the end.
+
+Each script writes a JSON report with the case, the expected code, and the code that the network returned.
+
+Two contracts exist only for these checks, on testnet: `contracts/test-router` pays a price that the test chooses, and `contracts/test-oracle` returns a quote with a chosen age and history. **Neither is a DEX or a price source**, and no product vault allowlists them. They exist because the slippage cap, the floor check, and the oracle breaker cannot be exercised onchain without a counterparty that pays a bad price and a feed that can be made stale.
+
 ## Tech stack
 
 | Layer     | Technology                                |
@@ -160,5 +208,6 @@ Set `NEXT_PUBLIC_INDEXER_URL` (default `http://localhost:8080`) for the frontend
 | State     | Zustand 5 + Immer                         |
 | UI        | Radix UI                                  |
 | Contract  | Soroban SDK 26.1 + OZ Pausable           |
+| Strategy  | Python 3.13 + FastAPI (CPPI engine)       |
 | Indexer   | Fastify + Prisma + Postgres + node-cron   |
 | Standards | SEP-41 (token), SEP-56 (vault), SEP-40 (oracle) |
