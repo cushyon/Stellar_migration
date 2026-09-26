@@ -5,7 +5,8 @@
 # adapter and a real swap. It needs the test contracts, so it must NOT run on the
 # product vault: it changes the config, the adapter rate, and the pause state.
 #
-# The adapter (contracts/test-router) pays a price that the test chooses. The mock
+# The adapter (contracts/test-router) swaps at a price that the test chooses, and can
+# pay under that price on purpose. The mock
 # oracle (contracts/test-oracle) returns a stale or deviating quote, which the real
 # Reflector feed cannot be asked to do. The script puts the vault back to its start
 # state at the end, so it can run again.
@@ -18,9 +19,9 @@ NETWORK=${NETWORK:-testnet}
 SOURCE=${SOURCE:-cushion-deployer}
 OTHER_SOURCE=${OTHER_SOURCE:-cushion-tester}
 VAULT=${VAULT:-CBNHFG6WLQ3YKGL554SR37SKYL6VUSWCQ4EIBTCFYPL4RQJX2QDOHT4P}
-ROUTER=${ROUTER:-CCLL54JPXNQGWVYRMQT35THZJ3HIPJOGN3LFGN63MHB3CQEI2IMFWU5W}
+ROUTER=${ROUTER:-CBQRVMZNNISIVHHUPY4SMTMPCF3QZSW6JGNHB2REZ3EBY5Q7ZBRGVIL4}
 TST=${TST:-CAJGMOESC4BH7LZ2NMPZVUKO7WWOWIXD7SHEW5QZYDWOL226ZIYJQ5ZG}
-MOCK_ORACLE=${MOCK_ORACLE:-CC4M55ZEATXYRJBDA2RNGIM3IX6Y5GYI6K4EFEFNS4OVC5VD5COVUZZM}
+MOCK_ORACLE=${MOCK_ORACLE:-CBO2YVCAX2BCP5ORUT6TSCCPGC4Q5PGUCYJJPPLSQT6ENVHVZ7ARCFSE}
 XLM=${XLM:-CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC}
 USDC=${USDC:-CA2E53VHFZ6YSWQIEIPBXJQGT6VW3VKWWZO555XKRQXYJ63GEBJJGHY7}
 REFLECTOR=${REFLECTOR:-CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63}
@@ -74,13 +75,13 @@ record "router not in the allowlist" 29 "$(strategy "$SOURCE" "$XLM" "$TST" 1000
 record "trade above max_trade_size"  22 "$(strategy "$SOURCE" "$XLM" "$TST" 400000000 1 "$N" "$FAR" "$ROUTER")"
 
 # --- realized price checks -------------------------------------------------
-send "$ROUTER" set_rate --rate_bps 5000
+send "$ROUTER" set_market --base "$XLM" --risky "$TST" --price_bps 10000 --slippage_bps 5000
 record "output below min_amount_out" 24 "$(strategy "$SOURCE" "$XLM" "$TST" 300000000 290000000 "$N" "$FAR" "$ROUTER")"
-send "$ROUTER" set_rate --rate_bps 9000
+send "$ROUTER" set_market --base "$XLM" --risky "$TST" --price_bps 10000 --slippage_bps 1000
 record "output below the oracle cap" 43 "$(strategy "$SOURCE" "$XLM" "$TST" 300000000 1 "$N" "$FAR" "$ROUTER")"
 
 # --- a trade that passes every check ---------------------------------------
-send "$ROUTER" set_rate --rate_bps 10000
+send "$ROUTER" set_market --base "$XLM" --risky "$TST" --price_bps 10000 --slippage_bps 0
 nav_before=$(inv "$VAULT" "$SOURCE" total_assets | tail -1 | tr -d '"')
 send "$VAULT" execute_strategy --operator "$OPERATOR" --router "$ROUTER" --token_in "$XLM" --token_out "$TST" \
   --amount_in 300000000 --min_amount_out 299000000 --nonce "$N" --deadline "$FAR" --path '[]'

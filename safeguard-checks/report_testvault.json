@@ -1,10 +1,10 @@
 {
   "network": "testnet",
   "vault": "CBNHFG6WLQ3YKGL554SR37SKYL6VUSWCQ4EIBTCFYPL4RQJX2QDOHT4P",
-  "router": "CCLL54JPXNQGWVYRMQT35THZJ3HIPJOGN3LFGN63MHB3CQEI2IMFWU5W",
+  "router": "CBQRVMZNNISIVHHUPY4SMTMPCF3QZSW6JGNHB2REZ3EBY5Q7ZBRGVIL4",
   "token": "CAJGMOESC4BH7LZ2NMPZVUKO7WWOWIXD7SHEW5QZYDWOL226ZIYJQ5ZG",
-  "mock_oracle": "CC4M55ZEATXYRJBDA2RNGIM3IX6Y5GYI6K4EFEFNS4OVC5VD5COVUZZM",
-  "checked_at": "2026-09-26T11:25:02Z",
+  "mock_oracle": "CBO2YVCAX2BCP5ORUT6TSCCPGC4Q5PGUCYJJPPLSQT6ENVHVZ7ARCFSE",
+  "checked_at": "2026-09-26T17:23:09Z",
   "pass": 20,
   "fail": 0,
   "cases": [
@@ -16,7 +16,7 @@
     {"case":"trade above max_trade_size","expected":"22","got":"22","status":"pass"},
     {"case":"output below min_amount_out","expected":"24","got":"24","status":"pass"},
     {"case":"output below the oracle cap","expected":"43","got":"43","status":"pass"},
-    {"case":"fair swap is accepted","expected":"3","got":"3","status":"pass"},
+    {"case":"fair swap is accepted","expected":"27","got":"27","status":"pass"},
     {"case":"fair swap keeps the NAV","expected":"1000000000","got":"1000000000","status":"pass"},
     {"case":"second trade inside cooldown","expected":"23","got":"23","status":"pass"},
     {"case":"trade that breaks the floor","expected":"28","got":"28","status":"pass"},
