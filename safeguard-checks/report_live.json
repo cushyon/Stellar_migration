@@ -1,0 +1,16 @@
+{
+  "network": "testnet",
+  "vault": "CAH4EGSDBIEJB5TQFH4Q37372UJBY27UN2UBF426YDR2IUVJWACJLBAE",
+  "operator": "GAY2UVW3IZZ2H53ENP5XMTHBYXF4IHXTLBWI4OSERK3UK7X66DKSN7GT",
+  "nonce": 0,
+  "checked_at": "2026-09-26T11:09:04Z",
+  "pass": 5,
+  "fail": 0,
+  "cases": [
+    {"case":"unauthorized operator","expected":20,"got":20,"status":"pass"},
+    {"case":"nonce mismatch","expected":26,"got":26,"status":"pass"},
+    {"case":"deadline expired","expected":27,"got":27,"status":"pass"},
+    {"case":"token not allowed","expected":21,"got":21,"status":"pass"},
+    {"case":"router not allowed","expected":29,"got":29,"status":"pass"}
+  ]
+}
