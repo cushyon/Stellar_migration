@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["contracts/strategy-vault", "contracts/test-router", "contracts/test-oracle"]
+members = ["contracts/strategy-vault", "contracts/test-router", "contracts/test-oracle", "contracts/soroswap-adapter"]
 
 [profile.release]
 opt-level = "z"
