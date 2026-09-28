@@ -1,17 +1,17 @@
 {
   "network": "testnet",
-  "vault": "CBNHFG6WLQ3YKGL554SR37SKYL6VUSWCQ4EIBTCFYPL4RQJX2QDOHT4P",
+  "vault": "CD6LYP5LKO27USXHLEZU7MCOWKG7J4C25HMVJOUEXVIZ74UAW27OTLMH",
   "oracle": "CBO2YVCAX2BCP5ORUT6TSCCPGC4Q5PGUCYJJPPLSQT6ENVHVZ7ARCFSE",
-  "floor_bps_during_stress": 2000,
-  "checked_at": "2026-09-26T17:41:06Z",
+  "floor_bps": 6000,
+  "checked_at": "2026-09-28T10:05:21Z",
   "scenarios": [
-    {"scenario":"calm market, three cycles","expected":"allocation reaches the target","observed":"target 80.0%, actual 80.0%"},
-    {"scenario":"price -30%","expected":"the keeper sells the risky leg","observed":"from 73.7% to 42.1%, target 42.1%"},
-    {"scenario":"price -70%","expected":"the keeper keeps selling","observed":"target 0.0%, actual 0.0%"},
+    {"scenario":"calm market, three cycles","expected":"allocation reaches the target","observed":"target 90.3%, actual 90.3% XLM"},
+    {"scenario":"XLM -30%","expected":"the keeper sells XLM","observed":"from 86.6% to 49.5%, target 49.5%"},
+    {"scenario":"XLM -70%","expected":"everything in the safe asset, strategy stopped","observed":"target 0.0%, actual 0.0% XLM, stopped true"},
     {"scenario":"quote 1 hour old","expected":"no trade","observed":"[keeper] hold: oracle unavailable"},
-    {"scenario":"last price 2x the recent mean","expected":"no trade","observed":"[keeper] hold: oracle unavailable"},
+    {"scenario":"TST quote 2x the recent mean","expected":"no trade","observed":"[keeper] hold: oracle unavailable"},
     {"scenario":"venue pays 10% under","expected":"rejected with 43","observed":"error 43"},
     {"scenario":"vault paused","expected":"no trade","observed":"[keeper] hold: vault is paused"},
-    {"scenario":"vault restored","expected":"0.0% risky, Reflector back","observed":"0.0% risky"}
+    {"scenario":"vault restored","expected":"safe asset held, product config back","observed":"0.0% XLM, stopped true"}
   ]
 }

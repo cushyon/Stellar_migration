@@ -1,0 +1,16 @@
+{
+  "network": "testnet",
+  "vault": "CD6LYP5LKO27USXHLEZU7MCOWKG7J4C25HMVJOUEXVIZ74UAW27OTLMH",
+  "adapter": "CDPKUYNWPDELEVXGYA63WI7IPK3RCKPED77PEQWVRQSXKNFYHBD2YAR6",
+  "soroswap_router": "CCJUD55AG6W5HAI5LRVNKAE5WDP5XGZBUDS5WNTIVDU7O264UZZE7BRD",
+  "pair": "CDVAIOYHCD4RUSLQNVFI7RIZBFT2JZMJWM4RTOLQZQXL4QAVXU5RFKDB",
+  "pair_reserves": ["380616993876","2093160169789"],
+  "oracle_price_usdc_in_xlm": "461329900033945",
+  "max_slippage_bps": 500,
+  "checked_at": "2026-09-27T19:13:27Z",
+  "cases": [
+    {"case":"buy USDC above the oracle price","expected":"refused with 43","observed":"error 43"},
+    {"case":"sell 1 USDC for XLM","expected":"executed onchain","observed":"ed14b54e1a6322ce5b112dabc1ab3f314235df55e6b3f3bf9ad394cd7d1fcf08 (+5.4838 XLM)"},
+    {"case":"NAV follows the trade","expected":"NAV rises with the fill","observed":"633257244 -> 641962168"}
+  ]
+}
