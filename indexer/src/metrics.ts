@@ -28,6 +28,8 @@ export async function vaultStats(vaultId: string) {
 
   const navNum = Number(latest.nav);
   const basePct = navNum > 0 ? Number(latest.allocBase) / navNum : 0;
+  // Strategy roles: the safe leg is the base asset, or the other token.
+  const safePct = latest.safeIsBase ? basePct : 1 - basePct;
   const r30 = await trailingReturn(vaultId, latest.sharePrice, latest.ts, 30);
   const r60 = await trailingReturn(vaultId, latest.sharePrice, latest.ts, 60);
   const r90 = await trailingReturn(vaultId, latest.sharePrice, latest.ts, 90);
@@ -52,6 +54,10 @@ export async function vaultStats(vaultId: string) {
       risky: latest.allocRisky.toString(),
       basePct,
       riskyPct: 1 - basePct,
+      // roles of the strategy, independent of which token is the base asset
+      safeIsBase: latest.safeIsBase,
+      safePct,
+      strategyPct: 1 - safePct,
     },
     performance: { "30d": r30, "60d": r60, "90d": r90, apy, inception },
     ledger: latest.ledger,

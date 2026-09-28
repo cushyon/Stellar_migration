@@ -4,7 +4,7 @@ import { prisma } from "./db.js";
 import { config } from "./config.js";
 import { readContract, addressArg, invokeContract, ContractCallError } from "./stellar.js";
 import { askEngine } from "./engine.js";
-import { takeRiskSnapshot } from "./risk.js";
+import { takeRiskSnapshot, type VaultConfig } from "./risk.js";
 import type { Alert } from "./alerts.js";
 
 const PRICE_SCALE = 1e14; // the vault returns prices with 14 decimals
@@ -15,22 +15,30 @@ type Log = { info: (m: string) => void; warn: (m: string) => void; error: (m: st
 /// and send one trade when the drift is large enough. Every decision is stored,
 /// including the ones that send nothing.
 ///
+/// Roles come from the vault config. In the product shape the base asset (XLM)
+/// is the risky leg and `safe_asset` (USDC) is the safe leg; the keeper then
+/// computes in safe units, with the base priced through the oracle. A vault
+/// whose base asset is the safe asset works too, with KEEPER_RISKY_ASSET_ID.
+///
 /// The vault checks the trade again onchain. The keeper can only propose.
 export async function runKeeper(log?: Log): Promise<void> {
   if (!config.keeper.enabled) return;
   const vault = config.keeper.vaultId;
-  const risky = config.keeper.riskyAssetId;
   const router = config.keeper.routerId;
-
-  if (!risky || !router) {
-    log?.warn("[keeper] KEEPER_RISKY_ASSET_ID or KEEPER_ROUTER_ID missing, cycle skipped");
+  if (!router) {
+    log?.warn("[keeper] KEEPER_ROUTER_ID missing, cycle skipped");
     return;
   }
 
-  const cfg = (await readContract(vault, "get_config")) as {
-    max_trade_size: bigint;
-    cooldown_period: bigint;
-  };
+  const cfg = (await readContract(vault, "get_config")) as VaultConfig;
+  const base = config.baseAssetId;
+  const safe = cfg.safe_asset;
+  const baseIsRisky = safe !== base;
+  const risky = baseIsRisky ? base : config.keeper.riskyAssetId;
+  if (!risky) {
+    log?.warn("[keeper] the base asset is the safe asset and KEEPER_RISKY_ASSET_ID is missing, cycle skipped");
+    return;
+  }
 
   // The vault refuses a trade inside the cooldown. Check it here too, so a
   // cycle that cannot trade costs one RPC read and writes no noisy row.
@@ -79,45 +87,52 @@ export async function runKeeper(log?: Log): Promise<void> {
   if (risk.paused) return hold(vault, "vault is paused", log);
   if (!risk.oracleOk) return hold(vault, "oracle unavailable", log);
   if (risk.supply === 0n) return hold(vault, "vault has no shares", log);
+  if (!risk.epoch.active) return hold(vault, "no epoch started: the admin must call start_epoch", log);
 
-  // Price of one risky unit in base units, from the vault itself, so the keeper
-  // and the contract value the leg the same way.
-  const riskyPrice =
-    Number((await readContract(vault, "safe_price", [addressArg(risky)])) as bigint) / PRICE_SCALE;
-  if (!(riskyPrice > 0)) return hold(vault, "risky price is zero", log);
+  // Prices in base units, from the vault itself, so the keeper and the contract
+  // value every leg the same way. The base is worth exactly 1 base.
+  const priceInBase = async (token: string) =>
+    token === base ? 1 : Number((await readContract(vault, "safe_price", [addressArg(token)])) as bigint) / PRICE_SCALE;
+  const safeInBase = await priceInBase(safe);
+  const riskyInBase = await priceInBase(risky);
+  if (!(safeInBase > 0) || !(riskyInBase > 0)) return hold(vault, "a price is zero", log);
 
-  const riskyBalance = BigInt(
-    (await readContract(risky, "balance", [addressArg(vault)])) as bigint
-  );
+  const balanceOf = async (token: string) =>
+    token === base ? risk.baseBalance : BigInt((await readContract(token, "balance", [addressArg(vault)])) as bigint);
+  const riskyBalance = await balanceOf(risky);
+  const safeBalance = await balanceOf(safe);
 
-  // Per-share values: a deposit or a withdrawal must not change the target.
+  // Everything the engine sees is per share and in safe units, so deposits and
+  // withdrawals do not move the target, and the engine floor is the contract
+  // floor: initial and high-water mark come from the vault epoch.
   const supply = Number(risk.supply);
-  const navPerShare = Number(risk.nav) / supply;
-  const state = await loadState(vault, navPerShare);
-  const maxSharePrice = Math.max(state.maxSharePrice, navPerShare);
+  const priceRiskyInSafe = riskyInBase / safeInBase;
+  const initial = Number(risk.epoch.initial) / PRICE_SCALE;
+  const hwm = Number(risk.epoch.hwm) / PRICE_SCALE;
 
   const answer = await askEngine({
-    price_risky: riskyPrice,
+    price_risky: priceRiskyInSafe,
     price_safe: 1,
-    nav: navPerShare,
-    max_nav: maxSharePrice,
+    nav: risk.valueSafe,
+    max_nav: Math.max(hwm, risk.valueSafe),
     risky_amount: Number(riskyBalance) / supply,
-    safe_amount: Number(risk.baseBalance) / supply,
-    initial_capital: state.initialSharePrice,
+    safe_amount: Number(safeBalance) / supply,
+    initial_capital: initial,
   });
 
-  await prisma.strategyState.update({
+  await prisma.strategyState.upsert({
     where: { vault },
-    data: { maxSharePrice: answer.newMaxNav, lastLimitOrderPrice: answer.limitOrderPrice },
+    create: { vault, initialSharePrice: initial, maxSharePrice: answer.newMaxNav, lastLimitOrderPrice: answer.limitOrderPrice },
+    update: { initialSharePrice: initial, maxSharePrice: answer.newMaxNav, lastLimitOrderPrice: answer.limitOrderPrice },
   });
 
-  // Drift between the target risky value and the current one, in base units.
-  const navTotal = Number(risk.nav);
-  const targetRiskyValue = (answer.percentageAsset1 / 100) * navTotal;
-  const actualRiskyValue = Number(riskyBalance) * riskyPrice;
+  // Drift between the target risky value and the real one, in safe units.
+  const navSafe = risk.valueSafe * supply;
+  const targetRiskyValue = (answer.percentageAsset1 / 100) * navSafe;
+  const actualRiskyValue = Number(riskyBalance) * priceRiskyInSafe;
   const delta = targetRiskyValue - actualRiskyValue;
-  const driftPct = Math.abs(delta) / navTotal;
-  const actualRiskyPct = (actualRiskyValue / navTotal) * 100;
+  const driftPct = navSafe > 0 ? Math.abs(delta) / navSafe : 0;
+  const actualRiskyPct = navSafe > 0 ? (actualRiskyValue / navSafe) * 100 : 0;
 
   const common = {
     targetRiskyPct: answer.percentageAsset1,
@@ -125,23 +140,29 @@ export async function runKeeper(log?: Log): Promise<void> {
     detail: `limit order ${answer.limitOrderPrice.toFixed(6)}, ratchet steps ${answer.ratchetSteps}`,
   };
 
+  if (risk.stopped && delta > 0) {
+    return hold(vault, "the floor is reached: the strategy has stopped and may only sell", log, common);
+  }
   if (driftPct * 10_000 < config.keeper.driftBps) {
     return hold(vault, `drift ${(driftPct * 100).toFixed(2)}% below the threshold`, log, common);
   }
 
-  // Direction: buy the risky leg with base, or sell it back to base.
+  // Direction: buy the risky leg with the safe asset, or sell it back.
   const buy = delta > 0;
-  const tokenIn = buy ? config.baseAssetId : risky;
-  const tokenOut = buy ? risky : config.baseAssetId;
-  const priceIn = buy ? 1 : riskyPrice;
-  const priceOut = buy ? riskyPrice : 1;
+  const tokenIn = buy ? safe : risky;
+  const tokenOut = buy ? risky : safe;
+  const priceInBaseIn = buy ? safeInBase : riskyInBase;
+  const priceInBaseOut = buy ? riskyInBase : safeInBase;
 
+  // amount_in in token_in units: a value in safe units divided by the price of
+  // token_in in safe units.
+  const priceInInSafe = priceInBaseIn / safeInBase;
+  let amountIn = BigInt(Math.floor(Math.abs(delta) / priceInInSafe));
   const maxTrade = BigInt(cfg.max_trade_size);
-  let amountIn = BigInt(Math.floor(Math.abs(delta) / priceIn));
   if (amountIn > maxTrade) amountIn = maxTrade;
   if (amountIn <= 0n) return hold(vault, "amount rounds to zero", log, common);
 
-  const expectedOut = (Number(amountIn) * priceIn) / priceOut;
+  const expectedOut = (Number(amountIn) * priceInBaseIn) / priceInBaseOut;
   const minOut = BigInt(Math.floor((expectedOut * (10_000 - config.keeper.slippageBps)) / 10_000));
   const nonce = Number((await readContract(vault, "get_nonce")) as bigint);
   const deadline = Math.floor(Date.now() / 1000) + config.keeper.deadlineSeconds;
@@ -199,14 +220,6 @@ async function hold(
 ): Promise<void> {
   log?.info(`[keeper] hold: ${reason}`);
   await record(vault, "hold", "skipped", { ...common, detail: reason });
-}
-
-async function loadState(vault: string, sharePrice: number) {
-  return prisma.strategyState.upsert({
-    where: { vault },
-    create: { vault, initialSharePrice: sharePrice, maxSharePrice: sharePrice },
-    update: {},
-  });
 }
 
 async function record(

@@ -14,9 +14,13 @@ export async function takeSnapshot(log?: { info: (m: string) => void }): Promise
   const baseBal = BigInt(
     (await readContract(config.baseAssetId, "balance", [addressArg(config.vaultId)])) as bigint
   );
-  // Risky value in base = NAV − base balance (already oracle-valued inside NAV).
+  // Non-base value in base = NAV − base balance (already oracle-valued inside NAV).
   const riskyValue = nav - baseBal > 0n ? nav - baseBal : 0n;
   const sharePrice = totalShares > 0n ? Number(nav) / Number(totalShares) : 0;
+  // Which side is the safe leg. In the product shape the base asset is the
+  // risky leg and the safe asset is the other token.
+  const cfg = (await readContract(config.vaultId, "get_config")) as { safe_asset: string };
+  const safeIsBase = cfg.safe_asset === config.baseAssetId;
 
   await prisma.vaultSnapshot.create({
     data: {
@@ -27,6 +31,7 @@ export async function takeSnapshot(log?: { info: (m: string) => void }): Promise
       sharePrice,
       allocBase: new Prisma.Decimal(baseBal.toString()),
       allocRisky: new Prisma.Decimal(riskyValue.toString()),
+      safeIsBase,
     },
   });
   log?.info(`[snapshot] nav=${nav} shares=${totalShares} ledger=${ledger}`);

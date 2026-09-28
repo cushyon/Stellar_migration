@@ -36,6 +36,9 @@ model VaultSnapshot {
   sharePrice  Float    @map("share_price")
   allocBase   Decimal  @map("alloc_base") @db.Decimal(40, 0)
   allocRisky  Decimal  @map("alloc_risky") @db.Decimal(40, 0)
+  /// Which side is the safe leg: true when the base asset is the safe asset,
+  /// false when the base asset is the risky leg and the other token is safe.
+  safeIsBase  Boolean  @default(true) @map("safe_is_base")
 
   @@index([contractId, ts])
   @@map("vault_snapshot")
@@ -114,12 +117,17 @@ model RiskSnapshot {
   ts           DateTime @default(now())
   nav          Decimal  @db.Decimal(40, 0)
   sharePrice   Float    @map("share_price")
-  basePct      Float    @map("base_pct")
-  floorPct     Float    @map("floor_pct")
-  cushionPct   Float    @map("cushion_pct")
+  basePct      Float    @map("base_pct") // share of the NAV held in the base asset
+  floorPct     Float    @map("floor_pct") // floor as a fraction of the epoch start value
+  cushionPct   Float    @map("cushion_pct") // (value - floor) / start value
   oracleAgeSec Int?     @map("oracle_age_sec")
   oracleOk     Boolean  @map("oracle_ok")
   paused       Boolean
+  /// Value floor of the contract: share value and floor as fractions of the
+  /// epoch start value, and whether the strategy has stopped.
+  valuePct     Float?   @map("value_pct")
+  epochActive  Boolean  @default(false) @map("epoch_active")
+  stopped      Boolean  @default(false)
   alerts       String[] @default([])
 
   @@index([vault, ts])

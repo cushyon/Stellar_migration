@@ -4,21 +4,46 @@ import { config } from "./config.js";
 import { readContract, addressArg } from "./stellar.js";
 import { notifyAlerts, type Alert } from "./alerts.js";
 
+const PRICE_SCALE = 1e14; // the vault returns prices and share values with 14 decimals
+
+/// Vault config fields the risk module and the keeper read.
+export interface VaultConfig {
+  safe_asset: string;
+  floor_bps: number;
+  lockin_bps: number;
+  max_trade_size: bigint;
+  cooldown_period: bigint;
+  staleness: bigint;
+}
+
+export interface EpochState {
+  initial: bigint;
+  hwm: bigint;
+  floor: bigint;
+  active: boolean;
+}
+
 export interface RiskPicture {
   nav: bigint;
   supply: bigint;
   sharePrice: number;
   baseBalance: bigint;
-  basePct: number;
-  floorPct: number;
-  cushionPct: number; // base allocation above the floor, in points of NAV
-  oracleAgeSec: number | null;
+  basePct: number; // share of the NAV held in the base asset
+  safeAsset: string;
+  safeIsBase: boolean;
+  epoch: EpochState;
+  /// Share value in the safe asset, per share, unscaled (share_value_safe / 1e14).
+  valueSafe: number;
+  floorPct: number; // floor / epoch start value
+  valuePct: number; // value / epoch start value
+  cushionPct: number; // (value - floor) / epoch start value
+  stopped: boolean;
   oracleOk: boolean;
   paused: boolean;
   alerts: Alert[];
 }
 
-/// Read the risk picture of a vault: how far the base allocation is from the
+/// Read the risk picture of a vault: where the share value stands against the
 /// floor that the contract enforces, whether the oracle answers, and whether the
 /// vault is paused. It writes one row per cycle and returns the alerts.
 export async function takeRiskSnapshot(
@@ -28,18 +53,23 @@ export async function takeRiskSnapshot(
 ): Promise<RiskPicture> {
   const alerts: Alert[] = [];
 
-  const cfg = (await readContract(vault, "get_config")) as { floor_bps: number; staleness: bigint };
+  const cfg = (await readContract(vault, "get_config")) as VaultConfig;
   const paused = (await readContract(vault, "paused")) as boolean;
   const supply = BigInt((await readContract(vault, "total_supply")) as bigint);
+  const epoch = (await readContract(vault, "get_epoch")) as EpochState;
+  const safeIsBase = cfg.safe_asset === config.baseAssetId;
 
-  // NAV needs the oracle for every risky leg, so a failure here is an oracle alert.
+  // NAV and the share value need the oracle for every non-base leg, so a
+  // failure here is an oracle alert.
   let nav = 0n;
+  let valueScaled = 0n;
   let oracleOk = true;
   try {
     nav = BigInt((await readContract(vault, "total_assets")) as bigint);
+    valueScaled = BigInt((await readContract(vault, "share_value_safe")) as bigint);
   } catch (e) {
     oracleOk = false;
-    alerts.push({ key: "oracle", message: `NAV unavailable: ${(e as Error).message}` });
+    alerts.push({ key: "oracle", message: `share value unavailable: ${(e as Error).message}` });
   }
 
   const baseBalance = BigInt(
@@ -48,29 +78,32 @@ export async function takeRiskSnapshot(
 
   const navNum = Number(nav);
   const basePct = navNum > 0 ? Number(baseBalance) / navNum : 1;
-  const floorPct = cfg.floor_bps / 10_000;
-  const cushionPct = basePct - floorPct;
   const sharePrice = supply > 0n ? navNum / Number(supply) : 0;
 
-  // Age of the price that the vault would use for a risky leg.
-  let oracleAgeSec: number | null = null;
-  if (config.riskyAssetIds.length > 0) {
-    try {
-      await readContract(vault, "safe_price", [addressArg(config.riskyAssetIds[0])]);
-    } catch (e) {
-      oracleOk = false;
-      alerts.push({ key: "oracle", message: `price unavailable: ${(e as Error).message}` });
-    }
-  }
+  const valueSafe = Number(valueScaled) / PRICE_SCALE;
+  const initial = Number(epoch.initial) / PRICE_SCALE;
+  const floor = Number(epoch.floor) / PRICE_SCALE;
+  const floorPct = initial > 0 ? floor / initial : 0;
+  const valuePct = initial > 0 && oracleOk ? valueSafe / initial : 0;
+  const cushionPct = initial > 0 && oracleOk ? (valueSafe - floor) / initial : 0;
+  const stopped = epoch.active && oracleOk && valueSafe <= floor && supply > 0n;
 
   if (paused) alerts.push({ key: "paused", message: "the vault is paused" });
-  if (oracleOk && cushionPct < config.keeper.cushionAlertPct) {
+  if (supply === 0n) alerts.push({ key: "no_shares", message: "the vault has no shares" });
+  if (!epoch.active && supply > 0n) {
+    alerts.push({ key: "epoch_not_started", message: "no epoch is active, the strategy cannot trade" });
+  }
+  if (stopped) {
+    alerts.push({
+      key: "floor_reached",
+      message: `share value ${(valuePct * 100).toFixed(1)}% of start is at or under the floor ${(floorPct * 100).toFixed(1)}%: the strategy has stopped`,
+    });
+  } else if (epoch.active && oracleOk && supply > 0n && cushionPct < config.keeper.cushionAlertPct) {
     alerts.push({
       key: "cushion",
-      message: `base allocation ${(basePct * 100).toFixed(1)}% is close to the floor ${(floorPct * 100).toFixed(1)}%`,
+      message: `share value ${(valuePct * 100).toFixed(1)}% of start is close to the floor ${(floorPct * 100).toFixed(1)}%`,
     });
   }
-  if (supply === 0n) alerts.push({ key: "no_shares", message: "the vault has no shares" });
 
   await prisma.riskSnapshot.create({
     data: {
@@ -80,7 +113,10 @@ export async function takeRiskSnapshot(
       basePct,
       floorPct,
       cushionPct,
-      oracleAgeSec,
+      valuePct,
+      epochActive: epoch.active,
+      stopped,
+      oracleAgeSec: null,
       oracleOk,
       paused,
       alerts: alerts.map((a) => a.message),
@@ -91,7 +127,12 @@ export async function takeRiskSnapshot(
   await notifyAlerts(vault, alerts.concat(extraAlerts), log);
 
   if (alerts.length > 0) log?.warn(`[risk] ${vault}: ${alerts.map((a) => a.message).join(" | ")}`);
-  else log?.info(`[risk] base ${(basePct * 100).toFixed(1)}% floor ${(floorPct * 100).toFixed(1)}% oracle ok`);
+  else {
+    log?.info(
+      `[risk] value ${(valuePct * 100).toFixed(1)}% of start, floor ${(floorPct * 100).toFixed(1)}%, ` +
+        `base ${(basePct * 100).toFixed(1)}% of NAV, oracle ok`
+    );
+  }
 
   return {
     nav,
@@ -99,9 +140,14 @@ export async function takeRiskSnapshot(
     sharePrice,
     baseBalance,
     basePct,
+    safeAsset: cfg.safe_asset,
+    safeIsBase,
+    epoch,
+    valueSafe,
     floorPct,
+    valuePct,
     cushionPct,
-    oracleAgeSec,
+    stopped,
     oracleOk,
     paused,
     alerts,

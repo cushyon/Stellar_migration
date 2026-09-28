@@ -28,6 +28,9 @@ export const config = {
     // Send nothing, only store the decision. Safe default.
     dryRun: (process.env.KEEPER_DRY_RUN ?? "true").toLowerCase() !== "false",
     vaultId: process.env.KEEPER_VAULT_ID ?? req("VAULT_CONTRACT_ID"),
+    // Only for a vault whose base asset is the safe asset. When the base asset
+    // is the risky leg (the product shape), the keeper derives the roles from
+    // the vault config and this value is not used.
     riskyAssetId: process.env.KEEPER_RISKY_ASSET_ID ?? "",
     routerId: process.env.KEEPER_ROUTER_ID ?? "",
     engineUrl: process.env.STRATEGY_ENGINE_URL ?? "http://localhost:8000",
@@ -46,7 +49,8 @@ export const config = {
     unconfirmedAlertHours: Number(process.env.KEEPER_UNCONFIRMED_ALERT_HOURS ?? "24"),
     confirmTimeoutMs: Number(process.env.KEEPER_CONFIRM_TIMEOUT_MS ?? "60000"),
     feeStroops: process.env.KEEPER_FEE_STROOPS ?? "1000000",
-    // Alert when the base allocation is less than this above the floor.
+    // Alert when the share value is less than this above the floor, in points
+    // of the epoch start value (0.05 = 5 points).
     cushionAlertPct: Number(process.env.KEEPER_CUSHION_ALERT_PCT ?? "0.05"),
   },
 
