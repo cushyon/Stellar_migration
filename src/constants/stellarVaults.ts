@@ -11,9 +11,11 @@ export type StellarVaultConfig = {
   /** Onchain Soroban contract id - what the indexer API is keyed on. */
   contractId: string;
   description: string;
-  /** Capital-protection floor in basis points (min base allocation of NAV). */
+  /** Protected share of the value at the start of an epoch, in basis points. */
   floorBps: number;
   asset: StellarAssetConfig;
+  /** Symbol of the safe leg the floor is measured in. */
+  safeSymbol: string;
 };
 
 const STELLAR_VAULT_1: StellarVaultConfig = {
@@ -24,6 +26,7 @@ const STELLAR_VAULT_1: StellarVaultConfig = {
   description:
     "60% capital guarantee and profit lock-in, invested in XLM with automated rebalancing on Stellar",
   floorBps: 6000,
+  safeSymbol: "USDC",
   asset: {
     symbol: "XLM",
     decimals: 7,

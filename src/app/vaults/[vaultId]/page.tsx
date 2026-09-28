@@ -112,6 +112,7 @@ function VaultPerformancePanel({
         stats={stats}
         risk={risk}
         symbol={symbol}
+        safeSymbol={config.safeSymbol}
         decimals={decimals}
         floorBps={config.floorBps}
       />

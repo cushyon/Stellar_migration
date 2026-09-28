@@ -9,7 +9,15 @@ export interface VaultStats {
   vaultId: string;
   tvl: string; // base units (i128 as string)
   sharePrice: number;
-  allocation: { base: string; risky: string; basePct: number; riskyPct: number };
+  allocation: {
+    base: string;
+    risky: string;
+    basePct: number;
+    riskyPct: number;
+    safeIsBase: boolean; // the safe leg is the base asset, or the other token
+    safePct: number;
+    strategyPct: number;
+  };
   performance: {
     "30d": number | null;
     "60d": number | null;
@@ -116,9 +124,12 @@ export interface VaultRisk {
   ts: string;
   nav: string;
   sharePrice: number;
-  basePct: number; // base allocation, 0..1
-  floorPct: number; // floor the contract enforces, 0..1
-  cushionPct: number; // basePct - floorPct
+  basePct: number; // share of the NAV held in the base asset
+  floorPct: number; // floor as a fraction of the epoch start value
+  valuePct: number | null; // share value as a fraction of the epoch start value
+  cushionPct: number; // (value - floor) / start value
+  epochActive: boolean;
+  stopped: boolean; // the value reached the floor: the strategy only sells now
   oracleOk: boolean;
   paused: boolean;
   alerts: string[];

@@ -4,20 +4,23 @@ import type { VaultStats, VaultRisk } from "@/services/indexer";
 import { formatAmount } from "@/lib/format";
 
 /**
- * How the vault is invested right now, straight from indexed onchain balances,
- * with the protection floor drawn on the same scale. The floor is the share of
- * the safe asset that the contract refuses to go under.
+ * How the vault is invested right now, from indexed onchain balances, and
+ * where its value stands against the protection floor. The bar shows the safe
+ * share of the vault; the floor is a value the share may not fall under, so it
+ * is drawn on its own scale below, from the epoch start value.
  */
 export function AllocationBar({
   stats,
   risk,
   symbol,
+  safeSymbol,
   decimals,
   floorBps,
 }: {
   stats: VaultStats | null;
   risk: VaultRisk | null;
   symbol: string;
+  safeSymbol: string;
   decimals: number;
   floorBps: number;
 }) {
@@ -30,12 +33,17 @@ export function AllocationBar({
     );
   }
 
-  const basePct = stats.allocation.basePct * 100;
-  const riskyPct = stats.allocation.riskyPct * 100;
-  // The contract enforces the floor; the risk snapshot repeats it, so prefer it.
+  const safePct = stats.allocation.safePct * 100;
+  const strategyPct = stats.allocation.strategyPct * 100;
+  // Amounts are in the base asset, whatever the role of each side.
+  const safeAmount = stats.allocation.safeIsBase ? stats.allocation.base : stats.allocation.risky;
+  const strategyAmount = stats.allocation.safeIsBase ? stats.allocation.risky : stats.allocation.base;
+
+  // Value floor: the contract keeps the share value above this fraction of the
+  // epoch start value. Before the first risk snapshot, show the configured floor.
   const floorPct = (risk ? risk.floorPct : floorBps / 10_000) * 100;
-  // Below the floor the vault cannot take more risk: the contract refuses it.
-  const belowFloor = basePct + 0.05 < floorPct;
+  const valuePct = risk?.valuePct != null ? risk.valuePct * 100 : null;
+  const stopped = risk?.stopped ?? false;
 
   return (
     <div className="rounded border border-neutral-800 bg-neutral-900 p-4">
@@ -44,43 +52,40 @@ export function AllocationBar({
         <span className="text-xs text-gray-500">indexed onchain balances</span>
       </div>
 
-      <div className="mt-1">
-        {belowFloor && (
-          <span className="text-xs text-red-400">
-            The safe asset is under the floor. The vault refuses any trade that adds risk.
-          </span>
-        )}
-      </div>
+      {stopped && (
+        <p className="mt-1 text-xs text-red-400">
+          The value reached the floor. The strategy has stopped and only moves into {safeSymbol}.
+        </p>
+      )}
 
       <div className="relative mt-4 h-6 w-full overflow-hidden rounded bg-neutral-800">
         <div
-          className={`h-full ${belowFloor ? "bg-red-500/70" : "bg-[#475569]"}`}
-          style={{ width: `${Math.min(Math.max(basePct, 0), 100)}%` }}
-        />
-        {/* The floor, on the same scale as the safe share. */}
-        <div
-          className="absolute top-0 h-full border-l-2 border-dashed border-[hsl(55_89%_51%)]"
-          style={{ left: `${Math.min(Math.max(floorPct, 0), 100)}%` }}
-          title={`Protection floor ${floorPct.toFixed(0)}%`}
+          className={`h-full ${stopped ? "bg-red-500/70" : "bg-[#475569]"}`}
+          style={{ width: `${Math.min(Math.max(safePct, 0), 100)}%` }}
         />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
         <div className="flex flex-col gap-1">
-          <span className="text-gray-400">Safe ({symbol})</span>
+          <span className="text-gray-400">Safe ({safeSymbol})</span>
           <span>
-            {basePct.toFixed(1)}% · {formatAmount(stats.allocation.base, decimals)} {symbol}
+            {safePct.toFixed(1)}% · {formatAmount(safeAmount, decimals)} {symbol}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-gray-400">Strategy assets</span>
+          <span className="text-gray-400">Strategy ({symbol})</span>
           <span>
-            {riskyPct.toFixed(1)}% · {formatAmount(stats.allocation.risky, decimals)} {symbol}
+            {strategyPct.toFixed(1)}% · {formatAmount(strategyAmount, decimals)} {symbol}
           </span>
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-gray-400">Protection floor</span>
-          <span className="text-[hsl(55_89%_51%)]">{floorPct.toFixed(0)}% minimum safe</span>
+          <span className="text-[hsl(55_89%_51%)]">
+            {floorPct.toFixed(0)}% of start value
+            {valuePct != null && (
+              <span className="text-gray-400"> · now {valuePct.toFixed(1)}%</span>
+            )}
+          </span>
         </div>
       </div>
     </div>

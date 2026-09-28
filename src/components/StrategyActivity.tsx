@@ -36,6 +36,8 @@ const REFUSAL_REASON: Record<number, string> = {
   26: "wrong nonce",
   27: "deadline passed",
   28: "would break the protection floor",
+  44: "the strategy has stopped at the floor",
+  45: "no epoch started",
   29: "venue not on the allowlist",
   40: "price feed too old",
   41: "price feed disagrees with itself",
@@ -86,10 +88,15 @@ export function StrategyActivity({
             <span className={risk.oracleOk ? "text-gray-400" : "text-red-400"}>
               {risk.oracleOk ? "Price feed ok" : "Price feed unavailable"}
             </span>
-            {cushion != null && (
-              <span className={cushion >= 0 ? "text-gray-400" : "text-red-400"}>
-                {Math.abs(cushion).toFixed(1)} points {cushion >= 0 ? "above" : "below"} the floor
-              </span>
+            {risk.stopped ? (
+              <span className="text-red-400">Strategy stopped at the floor</span>
+            ) : (
+              cushion != null &&
+              risk.epochActive && (
+                <span className={cushion >= 0 ? "text-gray-400" : "text-red-400"}>
+                  {Math.abs(cushion).toFixed(1)} points {cushion >= 0 ? "above" : "below"} the floor
+                </span>
+              )
             )}
           </div>
         )}
