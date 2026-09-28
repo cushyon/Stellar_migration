@@ -22,6 +22,20 @@ export const config = {
   startLedger: process.env.START_LEDGER ? Number(process.env.START_LEDGER) : undefined,
   port: Number(process.env.PORT ?? "8080"),
 
+  // Testnet only: play the arbitrage trader on the Soroswap pool, so the pool
+  // stays at the oracle price and the vault can keep its mainnet oracle cap.
+  poolAlign: {
+    enabled: (process.env.TESTNET_POOL_ALIGN ?? "false").toLowerCase() === "true",
+    routerId: process.env.SOROSWAP_ROUTER_ID ?? "",
+    toleranceBps: Number(process.env.POOL_ALIGN_TOLERANCE_BPS ?? "20"),
+    feeBps: Number(process.env.POOL_ALIGN_FEE_BPS ?? "30"),
+    slippageBps: Number(process.env.POOL_ALIGN_SLIPPAGE_BPS ?? "200"),
+    // Stroops of XLM the operator keeps for transaction fees.
+    baseReserveKept: Number(process.env.POOL_ALIGN_BASE_KEPT ?? "500000000"),
+    minAmountIn: Number(process.env.POOL_ALIGN_MIN_AMOUNT_IN ?? "10000000"),
+    faucetUrl: process.env.SOROSWAP_FAUCET_URL ?? "https://api.soroswap.finance/api/faucet",
+  },
+
   // The keeper proposes trades. The vault checks them again onchain.
   keeper: {
     enabled: (process.env.KEEPER_ENABLED ?? "false").toLowerCase() === "true",
