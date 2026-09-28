@@ -3,6 +3,7 @@
 mod errors;
 mod events;
 mod fees;
+mod floor;
 mod oracle;
 mod storage;
 mod strategy;
@@ -12,6 +13,7 @@ mod vault;
 mod test;
 
 use errors::VaultError;
+use floor::EpochState;
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
 use stellar_contract_utils::pausable;
 use storage::StrategyConfig;
@@ -24,6 +26,16 @@ pub struct StrategyVaultContract;
 
 /// Authorize an emergency pause/unpause caller: the dedicated guardian or the
 /// admin. Caller `require_auth` is asserted by the entrypoint before this check.
+/// The safe asset must be a token the vault may hold, or the floor cannot be
+/// measured.
+fn require_safe_asset_allowed(config: &StrategyConfig) -> Result<(), VaultError> {
+    if config.allowed_tokens.contains(&config.safe_asset) {
+        Ok(())
+    } else {
+        Err(VaultError::TokenNotAllowed)
+    }
+}
+
 fn require_guardian_or_admin(e: &Env, caller: &Address) -> Result<(), VaultError> {
     if *caller == storage::get_guardian(e) || *caller == storage::get_admin(e) {
         Ok(())
@@ -56,6 +68,7 @@ impl StrategyVaultContract {
         if storage::is_initialized(&e) {
             return Err(VaultError::AlreadyInitialized);
         }
+        require_safe_asset_allowed(&config)?;
 
         storage::set_admin(&e, &admin);
         storage::set_asset(&e, &asset);
@@ -521,8 +534,49 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         let admin = storage::get_admin(&e);
         admin.require_auth();
+        require_safe_asset_allowed(&config)?;
+        // The epoch floor is a share value in the safe asset. Changing that
+        // asset while an epoch is live would compare values in two different
+        // units, so it needs a new epoch first.
+        if floor::get_epoch(&e).active && config.safe_asset != storage::get_config(&e).safe_asset {
+            return Err(VaultError::EpochActive);
+        }
         storage::set_config(&e, &config);
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Value floor
+    // -----------------------------------------------------------------------
+
+    /// Start an epoch at the current share value: the floor becomes `floor_bps`
+    /// of it. Admin only. Allowed before the first epoch and after the
+    /// strategy has stopped, never while an epoch is live above its floor.
+    pub fn start_epoch(e: Env) -> Result<EpochState, VaultError> {
+        storage::bump_instance(&e);
+        let admin = storage::get_admin(&e);
+        admin.require_auth();
+        floor::start(&e)
+    }
+
+    /// Epoch start value, high-water mark, floor (all share values in the safe
+    /// asset, scaled by 10^14), and whether an epoch is active.
+    pub fn get_epoch(e: Env) -> EpochState {
+        storage::bump_instance(&e);
+        floor::get_epoch(&e)
+    }
+
+    /// Live share value in the safe asset, scaled by 10^14.
+    pub fn share_value_safe(e: Env) -> Result<i128, VaultError> {
+        storage::bump_instance(&e);
+        floor::share_value_in_safe(&e)
+    }
+
+    /// True once the share value is at or under the floor. From then on the
+    /// strategy may only move into the safe asset.
+    pub fn strategy_stopped(e: Env) -> Result<bool, VaultError> {
+        storage::bump_instance(&e);
+        floor::is_stopped(&e)
     }
 
     pub fn set_admin(e: Env, new_admin: Address) -> Result<(), VaultError> {

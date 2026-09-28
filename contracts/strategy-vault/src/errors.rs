@@ -36,4 +36,11 @@ pub enum VaultError {
     /// Realized output below the oracle-implied minimum (hard protocol cap,
     /// independent of the operator-supplied `min_amount_out`).
     SlippageCapExceeded = 43,
+    /// The share value is at or under the floor: the strategy has stopped, and
+    /// no trade may add risk. Trades into the safe asset stay allowed.
+    StrategyStopped = 44,
+    /// No epoch has been started, so there is no floor to check against.
+    EpochNotStarted = 45,
+    /// An epoch is live and above its floor; it cannot be restarted.
+    EpochActive = 46,
 }

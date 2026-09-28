@@ -1,7 +1,7 @@
 use soroban_sdk::{contractclient, token, Address, Env, Vec};
 
 use crate::errors::VaultError;
-use crate::{events, oracle, storage, vault};
+use crate::{events, floor, oracle, storage, vault};
 
 /// Generic DEX router surface the vault swaps through. For Tranche 1 this is a
 /// placeholder interface exercised by a mock in tests; real Soroswap/Phoenix
@@ -19,7 +19,8 @@ pub trait Router {
 /// Order (cheap/authorization checks first, then the trade, then post-trade
 /// invariants): auth → nonce → deadline → token allowlist → router allowlist →
 /// trade-size cap → cooldown → swap → operator slippage floor → oracle
-/// slippage cap → floor guardrail → commit (nonce++, cooldown, event).
+/// slippage cap → value floor (epoch started, stop rule, floor kept, ratchet)
+/// → commit (nonce++, cooldown, event).
 #[allow(clippy::too_many_arguments)]
 pub fn execute(
     e: &Env,
@@ -78,6 +79,7 @@ pub fn execute(
     // NAV is oracle-valued; reverts here if the oracle is stale/deviating, so a
     // bad price can never be used to clear the floor check below.
     let nav_before = vault::total_assets(e);
+    let value_before = floor::share_value_from_nav(e, nav_before)?;
 
     // 8. Swap through the router and measure realized output.
     let balance_out_before = token::Client::new(e, &token_out).balance(&contract);
@@ -111,19 +113,15 @@ pub fn execute(
         return Err(VaultError::SlippageCapExceeded);
     }
 
-    // 11. Floor guardrail: base allocation must stay ≥ floor_bps of
-    //    NAV after the trade. Blocks a trade that de-risks below the protected
-    //    floor at execution time.
+    // 11. Value floor. The share value, measured in the safe asset, must stay
+    //     at or above the epoch floor after a trade that adds risk, and no trade
+    //     may add risk once the strategy has stopped (value at or under the
+    //     floor). A trade into the safe asset is always allowed. The floor
+    //     ratchets up on a new high and never comes down.
     let nav_after = vault::total_assets(e);
-    let base = storage::get_asset(e);
-    let base_after = token::Client::new(e, &base).balance(&contract);
-    let base_scaled = base_after.checked_mul(10_000).unwrap_or(i128::MAX);
-    let floor_required = nav_after
-        .checked_mul(config.floor_bps as i128)
-        .unwrap_or(i128::MAX);
-    if base_scaled < floor_required {
-        return Err(VaultError::FloorBreached);
-    }
+    let value_after = floor::share_value_from_nav(e, nav_after)?;
+    let adds_risk = token_out != config.safe_asset;
+    floor::check_trade(e, adds_risk, value_before, value_after)?;
 
     // 12. Commit.
     storage::set_last_trade_time(e, now);

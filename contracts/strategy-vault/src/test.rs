@@ -76,7 +76,7 @@ fn point_vault_at_mock(e: &Env, vault_addr: &Address, base: &Address, risky: &Ad
     let mut syms: Map<Address, Symbol> = Map::new(e);
     syms.set(base.clone(), symbol_short!("XLM"));
     syms.set(risky.clone(), symbol_short!("RSK"));
-    vault.set_config(&make_config(1_000_000_0000000, 60, allowed, mock.clone(), syms));
+    vault.set_config(&make_config(1_000_000_0000000, 60, allowed, mock.clone(), syms, risky.clone()));
     MockReflectorClient::new(e, mock).set(
         &symbol_short!("XLM"),
         &PRICE_SCALE,
@@ -120,7 +120,7 @@ struct StratFix {
     user: Address,
 }
 
-fn setup_strategy(e: &Env) -> StratFix {
+fn setup_strategy_with(e: &Env, start_epoch: bool) -> StratFix {
     e.mock_all_auths();
     e.ledger().set_timestamp(100_000);
 
@@ -145,7 +145,10 @@ fn setup_strategy(e: &Env) -> StratFix {
     let mut syms: Map<Address, Symbol> = Map::new(e);
     syms.set(base.clone(), symbol_short!("XLM"));
     syms.set(risky.clone(), symbol_short!("RSK"));
-    let mut config = make_config(1_000_000_0000000, 60, allowed, oracle.clone(), syms);
+    // Product shape: the base (XLM) is the risky leg, the second token is the
+    // safe leg. Tests keep calling it `risky` for its address; the floor is
+    // measured in it.
+    let mut config = make_config(1_000_000_0000000, 60, allowed, oracle.clone(), syms, risky.clone());
     config.allowed_routers.push_back(router.clone());
     vault.initialize(
         &admin,
@@ -157,19 +160,25 @@ fn setup_strategy(e: &Env) -> StratFix {
         &config,
     );
 
-    // Fund the user, and pre-fund the router with risky so swaps can pay out.
+    // Fund the user, and pre-fund the router with both tokens so swaps can pay out.
     base_sac.mint(&user, &100_000_0000000);
     risky_sac.mint(&router, &100_000_0000000);
+    base_sac.mint(&router, &100_000_0000000);
 
-    // Base (XLM) priced at 1.0 USD so a risky USD price equals its base cross-rate.
-    MockReflectorClient::new(e, &oracle).set(
-        &symbol_short!("XLM"),
-        &PRICE_SCALE,
-        &PRICE_SCALE,
-        &100_000u64,
-    );
+    // Base (XLM) priced at 1.0 USD so a token's USD price equals its base cross-rate.
+    // The safe token starts at 2.0, so one share is worth 0.5 safe units.
+    MockReflectorClient::new(e, &oracle).set(&symbol_short!("XLM"), &PRICE_SCALE, &PRICE_SCALE, &100_000u64);
+    MockReflectorClient::new(e, &oracle).set(&symbol_short!("RSK"), &(2 * PRICE_SCALE), &(2 * PRICE_SCALE), &100_000u64);
+
+    if start_epoch {
+        vault.start_epoch();
+    }
 
     StratFix { base, risky, router, oracle, vault: vault_addr, op, user }
+}
+
+fn setup_strategy(e: &Env) -> StratFix {
+    setup_strategy_with(e, true)
 }
 
 // ===========================================================================
@@ -203,7 +212,7 @@ macro_rules! setup {
 
         let mut allowed = Vec::new(&$e);
         allowed.push_back($token_addr.clone());
-        let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&$e), Map::new(&$e));
+        let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&$e), Map::new(&$e), $token_addr.clone());
 
         $vault.initialize(
             &$admin,
@@ -221,7 +230,8 @@ macro_rules! setup {
 }
 
 // Deliberate test values. Production values are PARAM: set with Wajih.
-const TEST_FLOOR_BPS: u32 = 6_000; // 60% base-asset floor (matches the vault narrative)
+const TEST_FLOOR_BPS: u32 = 6_000; // 60% of the epoch-start share value is protected
+const TEST_LOCKIN_BPS: u32 = 1_900; // the floor rises one step for each 19% gained
 const TEST_DEVIATION_BPS: u32 = 500; // 5% lastprice-vs-twap halt threshold
 const TEST_STALENESS: u64 = 3_600; // 1h max price age
 const TEST_DECIMALS_OFFSET: u32 = 3; // virtual-share offset (hardened over 0)
@@ -230,12 +240,14 @@ const PRICE_SCALE: i128 = 100_000_000_000_000; // 10^14, oracle price decimals
 
 /// Build a `StrategyConfig` for tests. Fee bps default to 0 (Tranche-1 inert).
 /// Centralised so new config fields don't require touching every call site.
+/// `safe_asset` is the token the floor is measured in; it must be in `allowed`.
 fn make_config(
     max_trade_size: i128,
     cooldown: u64,
     allowed: Vec<Address>,
     reflector_id: Address,
     asset_symbols: Map<Address, Symbol>,
+    safe_asset: Address,
 ) -> StrategyConfig {
     StrategyConfig {
         max_trade_size,
@@ -243,7 +255,9 @@ fn make_config(
         allowed_routers: Vec::new(allowed.env()),
         allowed_tokens: allowed,
         max_slippage_bps: TEST_MAX_SLIPPAGE_BPS,
+        safe_asset,
         floor_bps: TEST_FLOOR_BPS,
+        lockin_bps: TEST_LOCKIN_BPS,
         reflector_id,
         asset_symbols,
         deviation_bps: TEST_DEVIATION_BPS,
@@ -258,7 +272,7 @@ fn make_config(
 fn fee_config(e: &Env, base: &Address, mgmt: u32, perf: u32) -> StrategyConfig {
     let mut allowed = Vec::new(e);
     allowed.push_back(base.clone());
-    let mut cfg = make_config(1_000_000_0000000, 60, allowed, Address::generate(e), Map::new(e));
+    let mut cfg = make_config(1_000_000_0000000, 60, allowed, Address::generate(e), Map::new(e), base.clone());
     cfg.mgmt_fee_bps = mgmt;
     cfg.perf_fee_bps = perf;
     cfg
@@ -280,7 +294,7 @@ fn test_initialization() {
 
     let mut allowed = Vec::new(&e);
     allowed.push_back(token_addr.clone());
-    let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&e), Map::new(&e));
+    let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&e), Map::new(&e), token_addr.clone());
 
     vault.initialize(
         &admin,
@@ -314,7 +328,7 @@ fn test_double_initialization_fails() {
 
     let mut allowed = Vec::new(&e);
     allowed.push_back(token_addr.clone());
-    let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&e), Map::new(&e));
+    let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&e), Map::new(&e), token_addr.clone());
 
     vault.initialize(
         &admin, &token_addr, &operator,
@@ -677,7 +691,7 @@ fn test_update_config() {
 
     let mut allowed = Vec::new(&e);
     allowed.push_back(token_addr.clone());
-    let new_config = make_config(500_0000000, 120, allowed, Address::generate(&e), Map::new(&e));
+    let new_config = make_config(500_0000000, 120, allowed, Address::generate(&e), Map::new(&e), token_addr.clone());
 
     vault.set_config(&new_config);
     let stored = vault.get_config();
@@ -912,6 +926,63 @@ fn test_strategy_deadline_expired() {
     );
 }
 
+/// With `decimals_offset` 3 one share is 0.001 base. The safe token is 2.0 base
+/// at the start, so one share is worth 0.0005 safe units, and the floor is 60%
+/// of that. Values are scaled by PRICE_SCALE like the contract returns them.
+const SHARE_START: i128 = PRICE_SCALE / 1_000 / 2;
+const FLOOR_START: i128 = SHARE_START * 6 / 10;
+
+#[test]
+fn test_epoch_starts_at_the_baseline_share_value() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+
+    let epoch = vault.get_epoch();
+    assert!(epoch.active);
+    assert_eq!(epoch.initial, SHARE_START);
+    assert_eq!(epoch.hwm, SHARE_START);
+    assert_eq!(epoch.floor, FLOOR_START);
+
+    // A fair deposit does not move the share value.
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    assert_eq!(vault.share_value_safe(), SHARE_START);
+    assert!(!vault.strategy_stopped());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #45)")] // EpochNotStarted
+fn test_strategy_refused_before_an_epoch_starts() {
+    let e = Env::default();
+    let f = setup_strategy_with(&e, false);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let router = MockRouterClient::new(&e, &f.router);
+
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    router.set_out(&50_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.base, &f.risky, &100_0000000i128, &50_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
+    );
+}
+
+#[test]
+fn test_strategy_de_risk_always_passes_the_floor() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let router = MockRouterClient::new(&e, &f.router);
+
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    // Sell 900 of 1000 base for the safe token (fair: 450). The old allocation
+    // floor would have refused this; the value floor welcomes it.
+    router.set_out(&450_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.base, &f.risky, &900_0000000i128, &450_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
+    );
+    assert_eq!(vault.get_nonce(), 1);
+    assert_eq!(vault.share_value_safe(), SHARE_START, "a fair swap keeps the share value");
+}
+
 #[test]
 #[should_panic(expected = "Error(Contract, #28)")] // FloorBreached
 fn test_strategy_floor_breached() {
@@ -921,19 +992,56 @@ fn test_strategy_floor_breached() {
     let oracle = MockReflectorClient::new(&e, &f.oracle);
     let router = MockRouterClient::new(&e, &f.router);
 
+    // Hold 500 base and 250 safe (fair swap). Loosen the oracle cap so a bad
+    // fill can reach the floor; the floor must then refuse it on its own.
     vault.deposit(&f.user, &1_000_0000000i128, &f.user);
-    oracle.set(&symbol_short!("RSK"), &(2 * PRICE_SCALE), &(2 * PRICE_SCALE), &100_000u64);
-    // Swap 500 base → 250 risky (fair). Post-trade base = 500 of NAV 1000 = 50%
-    // < 60% floor → rejected, even though the swap itself is fair and slippage-OK.
-    let out = 250_0000000i128;
-    router.set_out(&out);
+    router.set_out(&250_0000000i128);
     vault.execute_strategy(
-        &f.op, &f.router, &f.base, &f.risky, &500_0000000i128, &out, &0u64, &200_000u64, &Vec::new(&e),
+        &f.op, &f.router, &f.base, &f.risky, &500_0000000i128, &250_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
+    );
+    let mut cfg = vault.get_config();
+    cfg.max_slippage_bps = 9_000;
+    vault.set_config(&cfg);
+
+    // The market falls: the safe token now costs 4.0 base. Value = 500/4 + 250 = 375 safe for the 1000 base deposited, floor 300.
+    oracle.set(&symbol_short!("RSK"), &(4 * PRICE_SCALE), &(4 * PRICE_SCALE), &100_000u64);
+    // Add risk with a terrible fill: 200 safe should buy 800 base, the router pays 100.
+    // Value after = 600/4 + 50 = 200 safe < 300 -> refused.
+    e.ledger().set_timestamp(100_100);
+    router.set_out(&100_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.risky, &f.base, &200_0000000i128, &1i128, &1u64, &200_000u64, &Vec::new(&e),
     );
 }
 
 #[test]
-fn test_strategy_floor_compliant_passes() {
+#[should_panic(expected = "Error(Contract, #44)")] // StrategyStopped
+fn test_strategy_stopped_refuses_more_risk() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let oracle = MockReflectorClient::new(&e, &f.oracle);
+    let router = MockRouterClient::new(&e, &f.router);
+
+    // 800 base and 100 safe after a fair swap.
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    router.set_out(&100_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.base, &f.risky, &200_0000000i128, &100_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
+    );
+    // Crash: the safe token costs 5.0 base. Value = 800/5 + 100 = 260 safe <= floor 300.
+    oracle.set(&symbol_short!("RSK"), &(5 * PRICE_SCALE), &(5 * PRICE_SCALE), &100_000u64);
+    assert!(vault.strategy_stopped());
+    // Buying base with the safe token adds risk: refused.
+    e.ledger().set_timestamp(100_100);
+    router.set_out(&50_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.risky, &f.base, &10_0000000i128, &1i128, &1u64, &200_000u64, &Vec::new(&e),
+    );
+}
+
+#[test]
+fn test_strategy_stopped_still_allows_de_risk() {
     let e = Env::default();
     let f = setup_strategy(&e);
     let vault = StrategyVaultContractClient::new(&e, &f.vault);
@@ -941,14 +1049,109 @@ fn test_strategy_floor_compliant_passes() {
     let router = MockRouterClient::new(&e, &f.router);
 
     vault.deposit(&f.user, &1_000_0000000i128, &f.user);
-    oracle.set(&symbol_short!("RSK"), &(2 * PRICE_SCALE), &(2 * PRICE_SCALE), &100_000u64);
-    // Swap 300 base → 150 risky: post-trade base = 700 of NAV 1000 = 70% ≥ 60%.
-    let out = 150_0000000i128;
-    router.set_out(&out);
+    // Crash before any trade: the safe token costs 5.0 base, value 200 safe <= floor 300.
+    oracle.set(&symbol_short!("RSK"), &(5 * PRICE_SCALE), &(5 * PRICE_SCALE), &100_000u64);
+    assert!(vault.strategy_stopped());
+    // Selling base for the safe token is still allowed: the vault protects what is left.
+    router.set_out(&100_0000000i128);
     vault.execute_strategy(
-        &f.op, &f.router, &f.base, &f.risky, &300_0000000i128, &out, &0u64, &200_000u64, &Vec::new(&e),
+        &f.op, &f.router, &f.base, &f.risky, &500_0000000i128, &100_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
     );
     assert_eq!(vault.get_nonce(), 1);
+}
+
+#[test]
+fn test_floor_ratchets_up_and_never_down() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let oracle = MockReflectorClient::new(&e, &f.oracle);
+    let router = MockRouterClient::new(&e, &f.router);
+
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    // The market rallies: the safe token costs 1.25 base, so one share (1 base) is worth 0.8 safe.
+    // That is +60% over the start of 0.5: three lock-in steps of 19% (0.095 each).
+    oracle.set(&symbol_short!("RSK"), &(PRICE_SCALE * 5 / 4), &(PRICE_SCALE * 5 / 4), &100_000u64);
+    // Any trade runs the ratchet. Sell 100 base for 80 safe (fair).
+    router.set_out(&80_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.base, &f.risky, &100_0000000i128, &80_0000000i128, &0u64, &200_000u64, &Vec::new(&e),
+    );
+    let epoch = vault.get_epoch();
+    let expected_floor = SHARE_START * (6_000 + 3 * 1_900) / 10_000; // 0.5 x 1.17 = 0.585
+    assert_eq!(epoch.floor, expected_floor);
+    assert_eq!(epoch.hwm, SHARE_START * 8 / 5); // 0.0008 safe per share
+
+    // The market falls back: the safe token costs 2.0 base again. The floor stays.
+    oracle.set(&symbol_short!("RSK"), &(2 * PRICE_SCALE), &(2 * PRICE_SCALE), &100_000u64);
+    e.ledger().set_timestamp(100_100);
+    router.set_out(&50_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.base, &f.risky, &100_0000000i128, &50_0000000i128, &1u64, &200_000u64, &Vec::new(&e),
+    );
+    assert_eq!(vault.get_epoch().floor, expected_floor, "the floor never comes down");
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #46)")] // EpochActive
+fn test_start_epoch_refused_while_live() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    vault.start_epoch();
+}
+
+#[test]
+fn test_start_epoch_allowed_after_a_stop() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let oracle = MockReflectorClient::new(&e, &f.oracle);
+
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    oracle.set(&symbol_short!("RSK"), &(5 * PRICE_SCALE), &(5 * PRICE_SCALE), &100_000u64);
+    assert!(vault.strategy_stopped());
+
+    // A new epoch starts from the current value, 0.0002, with a floor of 60% of it.
+    let epoch = vault.start_epoch();
+    assert_eq!(epoch.initial, SHARE_START * 2 / 5); // 0.0002 safe per share
+    assert_eq!(epoch.floor, SHARE_START * 2 / 5 * 6 / 10);
+    assert!(!vault.strategy_stopped());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #46)")] // EpochActive
+fn test_config_refuses_a_new_safe_asset_while_the_epoch_is_live() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    // The base is allowlisted, so only the live epoch can refuse this.
+    let mut cfg = vault.get_config();
+    cfg.safe_asset = f.base.clone();
+    vault.set_config(&cfg);
+}
+
+#[test]
+fn test_config_accepts_a_new_safe_asset_before_any_epoch() {
+    let e = Env::default();
+    let f = setup_strategy_with(&e, false);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let mut cfg = vault.get_config();
+    cfg.safe_asset = f.base.clone();
+    vault.set_config(&cfg);
+    assert_eq!(vault.get_config().safe_asset, f.base);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #21)")] // TokenNotAllowed
+fn test_config_refuses_a_safe_asset_outside_the_allowlist() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let mut cfg = vault.get_config();
+    cfg.safe_asset = Address::generate(&e);
+    vault.set_config(&cfg);
 }
 
 #[test]

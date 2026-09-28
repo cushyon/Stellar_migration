@@ -143,6 +143,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "lockin_bps"
+                      },
+                      "val": {
+                        "u32": 1900
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "max_slippage_bps"
                       },
                       "val": {
@@ -179,6 +187,14 @@
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "safe_asset"
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
                       }
                     },
                     {
@@ -424,6 +440,14 @@
                           },
                           {
                             "key": {
+                              "symbol": "lockin_bps"
+                            },
+                            "val": {
+                              "u32": 1900
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "max_slippage_bps"
                             },
                             "val": {
@@ -460,6 +484,14 @@
                             },
                             "val": {
                               "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "safe_asset"
+                            },
+                            "val": {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
                             }
                           },
                           {

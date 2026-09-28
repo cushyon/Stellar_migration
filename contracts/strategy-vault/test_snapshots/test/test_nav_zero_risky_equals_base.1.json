@@ -209,6 +209,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "lockin_bps"
+                      },
+                      "val": {
+                        "u32": 1900
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "max_slippage_bps"
                       },
                       "val": {
@@ -245,6 +253,14 @@
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "safe_asset"
+                      },
+                      "val": {
+                        "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
                       }
                     },
                     {
@@ -577,6 +593,14 @@
                           },
                           {
                             "key": {
+                              "symbol": "lockin_bps"
+                            },
+                            "val": {
+                              "u32": 1900
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "max_slippage_bps"
                             },
                             "val": {
@@ -613,6 +637,14 @@
                             },
                             "val": {
                               "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "safe_asset"
+                            },
+                            "val": {
+                              "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
                             }
                           },
                           {

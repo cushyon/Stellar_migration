@@ -48,7 +48,8 @@ contracts/
       oracle.rs               → Reflector (SEP-40) integration + circuit breaker
       storage.rs              → Storage keys, StrategyConfig, TTL helpers
       errors.rs               → Error enum
-      test.rs                 → 63 tests (~96% coverage)
+      floor.rs                → Value floor: epoch, ratchet, stop rule
+      test.rs                 → 73 tests
     Cargo.toml                → Soroban SDK 26.1.0 + OZ Pausable
   test-router/                → Testnet-only adapter for the safeguard checks (not a DEX)
   test-oracle/                → Testnet-only mock SEP-40 feed for the safeguard checks
@@ -70,13 +71,13 @@ The contract implements two Stellar standards:
 
 **SEP-56 (Vault)** - full vault interface: `deposit`, `withdraw`, `redeem`, `mint`, plus preview and conversion functions. Rounding favors the vault (down on deposit/redeem, up on withdraw/mint).
 
-**Strategy execution** (`execute_strategy`) - operator-restricted trades guarded, in order, by: access control → **nonce** (strict, monotonic replay protection) → **deadline** (ledger timestamp) → token allowlist → **router allowlist** (only vetted DEX adapters) → trade-size cap → cooldown → swap → **slippage** (`min_amount_out`, operator floor) → **oracle slippage cap** (`max_slippage_bps`: realized output must clear the oracle-implied minimum, a hard bound the operator cannot loosen) → **floor guardrail**. Emits a `strategy` event with `nav_before`/`nav_after`.
+**Strategy execution** (`execute_strategy`) - operator-restricted trades guarded, in order, by: access control → **nonce** (strict, monotonic replay protection) → **deadline** (ledger timestamp) → token allowlist → **router allowlist** (only vetted DEX adapters) → trade-size cap → cooldown → swap → **slippage** (`min_amount_out`, operator floor) → **oracle slippage cap** (`max_slippage_bps`: realized output must clear the oracle-implied minimum, a hard bound the operator cannot loosen) → **value floor** (below). Emits a `strategy` event with `nav_before`/`nav_after`.
 
 **Multi-asset NAV** - `total_assets()` returns `base_balance + Σ(risky_balanceᵢ × oracle_priceᵢ)`, valued in the base asset. It is the single chokepoint every conversion/preview funnels through, so share price reflects the whole portfolio. It is a *live* read of balances + oracle prices, never a stored number.
 
 **Oracle (Reflector, SEP-40)** - `get_safe_price` computes the USD cross-rate from `lastprice` and **reverts** on a stale quote, an unavailable quote, or a deviation beyond `deviation_bps` between `lastprice` and the mean of recent `prices()` records (a deviating oracle can therefore never produce a trade). The vault never accepts an executor-supplied price. Reflector is the primary source in Tranche 1; a DEX-TWAP primary layer (Soroswap/Phoenix pools) lands with the DEX adapters in Tranche 2, demoting the external feed to a sanity check per the target architecture.
 
-**Floor guardrail** - a strategy trade reverts if it would push the base-asset allocation below `floor_bps` of NAV (capital-protection floor, enforced at execution time).
+**Value floor** - the protection the product promises, enforced onchain. The vault measures the value of one share in the **safe asset** (`safe_asset`; for the product, USDC, while the base asset XLM is the risky leg). An admin starts an epoch with `start_epoch`; the floor is `floor_bps` of the share value at that moment, and it **ratchets**: each new high that clears one more `lockin_bps` step raises the floor by that step, and it never comes down. After a swap, a trade that **adds risk** (its `token_out` is not the safe asset) must leave the share value at or above the floor, and it is refused outright once the value is at or under the floor: **the strategy has stopped**. A trade into the safe asset is always allowed, so the vault can protect itself even after a gap. Withdrawals are never touched. `get_epoch`, `share_value_safe`, and `strategy_stopped` expose the state.
 
 **Emergency pause (OZ Pausable)** - a guardian (or admin) can `pause`/`unpause`. Pause halts `deposit`/`mint`/`execute_strategy`; `withdraw`/`redeem` stay callable.
 
@@ -102,7 +103,7 @@ The contract implements two Stellar standards:
 
 ### Config (`StrategyConfig`)
 
-`max_trade_size` (base units) · `cooldown_period` (s) · `allowed_tokens` (swap allowlist) · `allowed_routers` (venue allowlist) · `max_slippage_bps` (hard onchain cap vs oracle price) · `floor_bps` (min base % of NAV) · `reflector_id` (oracle) · `asset_symbols` (token → Reflector ticker) · `deviation_bps` · `staleness` (s) · `decimals_offset` · `mgmt_fee_bps` · `perf_fee_bps`. Risk parameters are set deliberately per deployment, not defaulted.
+`max_trade_size` (base units) · `cooldown_period` (s) · `allowed_tokens` (swap allowlist) · `allowed_routers` (venue allowlist) · `max_slippage_bps` (hard onchain cap vs oracle price) · `safe_asset` (the token the floor is measured in; must be allowlisted) · `floor_bps` (protected share of the epoch-start share value) · `lockin_bps` (profit lock-in step; 0 disables the ratchet) · `reflector_id` (oracle) · `asset_symbols` (token → Reflector ticker) · `deviation_bps` · `staleness` (s) · `decimals_offset` · `mgmt_fee_bps` · `perf_fee_bps`. Risk parameters are set deliberately per deployment, not defaulted.
 
 ### Build & deploy (stellar-cli)
 

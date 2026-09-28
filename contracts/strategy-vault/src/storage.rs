@@ -22,6 +22,10 @@ pub enum DataKey {
     Name,
     Symbol,
     Decimals,
+    EpochInitial,
+    EpochHwm,
+    EpochFloor,
+    EpochActive,
 
     // Persistent storage (per-address TTL)
     Balance(Address),
@@ -51,11 +55,21 @@ pub struct StrategyConfig {
     /// tighter, never looser. PARAM: set with Wajih - do not default.
     pub max_slippage_bps: u32,
 
-    // --- Floor (Decision 3) -----------------------------------------------
-    /// Minimum base-asset allocation, in bps of NAV (0..=10_000). A strategy
-    /// trade that would push the base allocation below this reverts.
+    // --- Value floor (Decision 3, revised 2026-09-27) ---------------------
+    /// The safe leg of the strategy (for the product: USDC, while the base
+    /// asset XLM is the risky leg). Share value and the floor are measured in
+    /// this asset. It must be in `allowed_tokens`. It may equal the base asset
+    /// for a vault whose base is the safe asset.
+    pub safe_asset: Address,
+    /// Protected share of the epoch-start share value, in bps (6000 = 60%).
+    /// A trade that adds risk must keep the share value at or above the floor;
+    /// once the value is at or under it, the strategy stops.
     /// PARAM: set with Wajih - do not default.
     pub floor_bps: u32,
+    /// Profit lock-in step, in bps of the epoch-start value. Each new high
+    /// that clears one more step raises the floor by that step. 0 disables it.
+    /// PARAM: set with Wajih - do not default.
+    pub lockin_bps: u32,
 
     // --- Oracle / circuit breaker (Decision 4) ----------------------------
     /// Reflector (SEP-40) oracle contract id, used for NAV pricing and the
@@ -231,6 +245,31 @@ pub fn get_high_water_mark(e: &Env) -> i128 {
 
 pub fn set_high_water_mark(e: &Env, hwm: i128) {
     e.storage().instance().set(&DataKey::HighWaterMark, &hwm);
+}
+
+// --- Value floor epoch ------------------------------------------------------
+
+pub fn get_epoch_initial(e: &Env) -> i128 {
+    e.storage().instance().get(&DataKey::EpochInitial).unwrap_or(0)
+}
+
+pub fn get_epoch_hwm(e: &Env) -> i128 {
+    e.storage().instance().get(&DataKey::EpochHwm).unwrap_or(0)
+}
+
+pub fn get_epoch_floor(e: &Env) -> i128 {
+    e.storage().instance().get(&DataKey::EpochFloor).unwrap_or(0)
+}
+
+pub fn get_epoch_active(e: &Env) -> bool {
+    e.storage().instance().get(&DataKey::EpochActive).unwrap_or(false)
+}
+
+pub fn set_epoch(e: &Env, initial: i128, hwm: i128, floor: i128, active: bool) {
+    e.storage().instance().set(&DataKey::EpochInitial, &initial);
+    e.storage().instance().set(&DataKey::EpochHwm, &hwm);
+    e.storage().instance().set(&DataKey::EpochFloor, &floor);
+    e.storage().instance().set(&DataKey::EpochActive, &active);
 }
 
 pub fn get_name(e: &Env) -> String {

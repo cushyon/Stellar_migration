@@ -191,6 +191,14 @@
                           },
                           {
                             "key": {
+                              "symbol": "lockin_bps"
+                            },
+                            "val": {
+                              "u32": 1900
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "max_slippage_bps"
                             },
                             "val": {
@@ -227,6 +235,14 @@
                             },
                             "val": {
                               "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "safe_asset"
+                            },
+                            "val": {
+                              "address": "CBUSYNQKASUYFWYC3M2GUEDMX4AIVWPALDBYJPNK6554BREHTGZ2IUNF"
                             }
                           },
                           {
