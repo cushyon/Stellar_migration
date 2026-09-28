@@ -21,8 +21,9 @@ export type StellarVaultConfig = {
 const STELLAR_VAULT_1: StellarVaultConfig = {
   name: "XLM Capital Protected",
   vaultId: "cushion",
-  // Testnet deployment (real Reflector oracle wired).
-  contractId: "CAH4EGSDBIEJB5TQFH4Q37372UJBY27UN2UBF426YDR2IUVJWACJLBAE",
+  // Testnet deployment with the value floor (2026-09-29): XLM base and risky
+  // leg, Soroswap testnet USDC as the safe leg, Reflector oracle, Soroswap adapter.
+  contractId: "CCY7NP6KLDWLPC2IKJYSKSXJPHAZWZPNHONBYVLYKRSHKN5KMPPVWVP6",
   description:
     "60% capital guarantee and profit lock-in, invested in XLM with automated rebalancing on Stellar",
   floorBps: 6000,

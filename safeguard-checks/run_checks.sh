@@ -16,13 +16,16 @@
 set -uo pipefail
 
 NETWORK=${NETWORK:-testnet}
-VAULT=${VAULT:-CAH4EGSDBIEJB5TQFH4Q37372UJBY27UN2UBF426YDR2IUVJWACJLBAE}
+VAULT=${VAULT:-CCY7NP6KLDWLPC2IKJYSKSXJPHAZWZPNHONBYVLYKRSHKN5KMPPVWVP6}
 SOURCE=${SOURCE:-cushion-deployer}
 OTHER_SOURCE=${OTHER_SOURCE:-cushion-tester}
 XLM=${XLM:-CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC}
-USDC=${USDC:-CA2E53VHFZ6YSWQIEIPBXJQGT6VW3VKWWZO555XKRQXYJ63GEBJJGHY7}
-# Router to use in the cases that must pass the router allowlist. Empty allowlist: every router fails.
-ROUTER=${ROUTER:-$USDC}
+# A token outside the allowlist of the vault. This USDC wrapper carries the mainnet
+# issuer of Circle, which nobody can issue on testnet, so no vault allows it.
+OTHER_TOKEN=${OTHER_TOKEN:-CA2E53VHFZ6YSWQIEIPBXJQGT6VW3VKWWZO555XKRQXYJ63GEBJJGHY7}
+# An address that is not in the router allowlist. The cases before the router
+# check do not reach it, and the router case expects the refusal.
+ROUTER=${ROUTER:-$OTHER_TOKEN}
 REPORT=${REPORT:-safeguard-checks/report_live.json}
 
 OPERATOR=$(stellar keys address "$SOURCE")
@@ -81,7 +84,7 @@ run_case "deadline expired" 27 "$SOURCE" \
 
 # 4. A token that the allowlist does not contain.
 run_case "token not allowed" 21 "$SOURCE" \
-  --operator "$OPERATOR" --router "$ROUTER" --token_in "$USDC" --token_out "$XLM" \
+  --operator "$OPERATOR" --router "$ROUTER" --token_in "$OTHER_TOKEN" --token_out "$XLM" \
   --amount_in 1000000000 --min_amount_out 1 --nonce "$nonce" --deadline "$FAR_FUTURE" --path '[]'
 
 # 5. A router that the venue allowlist does not contain.
