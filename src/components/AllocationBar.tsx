@@ -63,17 +63,17 @@ export function AllocationBar({
         </p>
       )}
 
-      {/* Two segments that sum to the vault: the risky asset in the Cushion blue,
-          the safe asset in a pale slate, red once the strategy has stopped. */}
+      {/* Two segments that sum to the vault, in the colours of the assets: XLM
+          white like the Stellar mark, USDC in its blue; red once the strategy has stopped. */}
       <div className="mt-4 flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-neutral-800">
         <div
           className={`h-full rounded-l-full ${
-            stopped ? "bg-red-500" : "bg-[linear-gradient(90deg,#123FFC_0%,#4571F4_100%)]"
+            stopped ? "bg-red-500" : "bg-slate-200"
           }`}
           style={{ width: `${Math.min(Math.max(strategyPct, 0), 100)}%` }}
         />
         <div
-          className="h-full rounded-r-full bg-slate-300"
+          className="h-full rounded-r-full bg-[#2775CA]"
           style={{ width: `${Math.min(Math.max(safePct, 0), 100)}%` }}
         />
       </div>
@@ -81,7 +81,7 @@ export function AllocationBar({
       <div className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
         <div className="flex flex-col gap-1">
           <span className="flex items-center gap-2 text-gray-400">
-            <span className={`h-2 w-2 rounded-full ${stopped ? "bg-red-500" : "bg-[#2F5BF6]"}`} />
+            <span className={`h-2 w-2 rounded-full ${stopped ? "bg-red-500" : "bg-slate-200"}`} />
             <Image src={icon} alt="" width={22} height={22} />
             Risky asset ({symbol})
           </span>
@@ -92,7 +92,7 @@ export function AllocationBar({
         </div>
         <div className="flex flex-col gap-1">
           <span className="flex items-center gap-2 text-gray-400">
-            <span className="h-2 w-2 rounded-full bg-slate-300" />
+            <span className="h-2 w-2 rounded-full bg-[#2775CA]" />
             <Image src={safeIcon} alt="" width={22} height={22} />
             Safe asset ({safeSymbol})
           </span>

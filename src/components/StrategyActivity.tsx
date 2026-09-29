@@ -74,30 +74,24 @@ export function StrategyActivity({
   // refusals, and say when the strategy last looked at the vault.
   const trades = runs.filter((run) => run.action !== "hold").slice(0, 6);
   const lastCheck = runs[0];
-  const cushion = risk ? risk.cushionPct * 100 : null;
+  // The header stays empty while everything is normal. It speaks only when
+  // the vault is paused, the price feed is down, or the strategy has stopped.
+  const warnings: { text: string; tone: string }[] = [];
+  if (risk?.paused) warnings.push({ text: "Vault paused", tone: "text-yellow-400" });
+  if (risk && !risk.oracleOk) warnings.push({ text: "Price feed unavailable", tone: "text-red-400" });
+  if (risk?.stopped) warnings.push({ text: "Strategy stopped at the floor", tone: "text-red-400" });
 
   return (
     <div className="rounded border border-neutral-800 bg-neutral-900 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-lg font-semibold">Strategy activity</h3>
-        {risk && (
+        {warnings.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 text-xs">
-            <span className={risk.paused ? "text-yellow-400" : "text-gray-400"}>
-              {risk.paused ? "Vault paused" : "Vault active"}
-            </span>
-            <span className={risk.oracleOk ? "text-gray-400" : "text-red-400"}>
-              {risk.oracleOk ? "Price feed ok" : "Price feed unavailable"}
-            </span>
-            {risk.stopped ? (
-              <span className="text-red-400">Strategy stopped at the floor</span>
-            ) : (
-              cushion != null &&
-              risk.epochActive && (
-                <span className={cushion >= 0 ? "text-gray-400" : "text-red-400"}>
-                  {Math.abs(cushion).toFixed(1)} points {cushion >= 0 ? "above" : "below"} the floor
-                </span>
-              )
-            )}
+            {warnings.map((w) => (
+              <span key={w.text} className={w.tone}>
+                {w.text}
+              </span>
+            ))}
           </div>
         )}
       </div>
