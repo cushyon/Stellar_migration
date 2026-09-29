@@ -24,8 +24,10 @@ import { AllocationBar } from "@/components/AllocationBar";
 import { StrategyActivity } from "@/components/StrategyActivity";
 import {
   invokeVault,
+  StaleQuoteError,
   toBaseUnits,
   fetchNativeBalance,
+  fundWithFriendbot,
   explorerTxUrl,
 } from "@/services/vaultTx";
 
@@ -119,7 +121,7 @@ function VaultPerformancePanel({
         floorBps={config.floorBps}
       />
 
-      <StrategyActivity runs={runs} risk={risk} symbol={symbol} decimals={decimals} />
+      <StrategyActivity runs={runs} risk={risk} symbol={symbol} safeSymbol={config.safeSymbol} decimals={decimals} />
     </div>
   );
 }
@@ -228,18 +230,25 @@ function DepositWithdrawForm({
   const [txStatus, setTxStatus] = useState<
     | { kind: "success"; hash: string }
     | { kind: "error"; message: string }
+    | { kind: "info"; message: string }
     | null
   >(null);
   const isDeposit = formType === "deposit";
 
   // wallet XLM balance (deposit max); position value (withdraw max)
   const [walletBalance, setWalletBalance] = useState(0);
+  // False when the wallet has never received XLM on this network.
+  const [walletFunded, setWalletFunded] = useState(true);
+  const [funding, setFunding] = useState(false);
   useEffect(() => {
     if (!address) return;
     let active = true;
     const load = async () => {
       const b = await fetchNativeBalance(address);
-      if (active) setWalletBalance(b);
+      if (active) {
+        setWalletBalance(b.balance);
+        setWalletFunded(b.funded);
+      }
     };
     load();
     const t = setInterval(load, 15_000);
@@ -247,7 +256,14 @@ function DepositWithdrawForm({
       active = false;
       clearInterval(t);
     };
-  }, [address, txStatus]);
+  }, [address, txStatus, funding]);
+
+  const requestTestXlm = async () => {
+    if (!address) return;
+    setFunding(true);
+    await fundWithFriendbot(address);
+    setFunding(false);
+  };
 
   const positionValue =
     stats && position
@@ -275,12 +291,24 @@ function DepositWithdrawForm({
     if (!address || !canSubmit) return;
     setSubmitting(true);
     setTxStatus(null);
-    try {
-      const { hash } = await invokeVault(isDeposit ? "deposit" : "withdraw", {
+    const call = () =>
+      invokeVault(isDeposit ? "deposit" : "withdraw", {
         contractId: config.contractId,
         caller: address,
         amountBase: toBaseUnits(inputAmount, decimals),
       });
+    try {
+      let result: { hash: string };
+      try {
+        result = await call();
+      } catch (e) {
+        // A signed transaction refused by the network changed nothing. Ask for
+        // one more signature on a fresh simulation before giving up.
+        if (!(e instanceof StaleQuoteError)) throw e;
+        setTxStatus({ kind: "info", message: e.message });
+        result = await call();
+      }
+      const { hash } = result;
       setTxStatus({ kind: "success", hash });
       setInputAmount("");
       // tx -> indexer cron -> API poll takes up to ~45s; burst-refresh so the
@@ -363,12 +391,35 @@ function DepositWithdrawForm({
           <span className="text-gray-400">Balance</span>
           <span>
             {formatQty(walletBalance)} {" -> "}
-            {formatQty(
-              walletBalance + (Number(inputAmount) || 0) * (isDeposit ? -1 : 1)
-            )}{" "}
+            <span className={isDeposit && amount > maxAmount ? "text-red-400" : ""}>
+              {formatQty(
+                walletBalance + (Number(inputAmount) || 0) * (isDeposit ? -1 : 1)
+              )}
+            </span>{" "}
             {symbol}
           </span>
         </div>
+
+        {/* A wallet with no testnet XLM cannot deposit: offer the faucet. */}
+        {connected && isDeposit && !walletFunded && (
+          <div className="flex flex-col gap-2 rounded border border-neutral-700 bg-neutral-900 p-3 text-xs">
+            <span className="text-gray-300">
+              This wallet holds no XLM on Stellar testnet yet.
+            </span>
+            <button
+              onClick={requestTestXlm}
+              disabled={funding}
+              className="self-start rounded-sm bg-[#2a3142] px-2 py-1 text-gray-200 hover:bg-[#343c52] disabled:opacity-50"
+            >
+              {funding ? "Asking Friendbot..." : "Get 10,000 test XLM from Friendbot"}
+            </button>
+          </div>
+        )}
+        {connected && isDeposit && walletFunded && amount > maxAmount && amount > 0 && (
+          <p className="text-xs text-red-400">
+            Not enough XLM: the wallet keeps 2 XLM for reserves and fees.
+          </p>
+        )}
       </div>
 
       {/* Spacer */}
@@ -378,7 +429,11 @@ function DepositWithdrawForm({
       {txStatus && (
         <p
           className={`mb-2 text-xs break-all ${
-            txStatus.kind === "success" ? "text-green-400" : "text-red-400"
+            txStatus.kind === "success"
+              ? "text-green-400"
+              : txStatus.kind === "info"
+                ? "text-gray-300"
+                : "text-red-400"
           }`}
         >
           {txStatus.kind === "success" ? (

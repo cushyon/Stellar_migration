@@ -4,11 +4,11 @@ import type { StrategyRun, VaultRisk } from "@/services/indexer";
 import { formatAmount } from "@/lib/format";
 import { explorerTxUrl } from "@/services/vaultTx";
 
-const ACTION_LABEL: Record<StrategyRun["action"], string> = {
-  hold: "Hold",
-  buy_risky: "Buy strategy assets",
-  sell_risky: "Sell to safe asset",
-};
+function actionLabel(action: StrategyRun["action"], symbol: string, safeSymbol: string): string {
+  if (action === "buy_risky") return `Buy ${symbol} with ${safeSymbol}`;
+  if (action === "sell_risky") return `Sell ${symbol} for ${safeSymbol}`;
+  return "Hold";
+}
 
 const STATUS_STYLE: Record<StrategyRun["status"], string> = {
   submitted: "text-green-400",
@@ -61,11 +61,13 @@ export function StrategyActivity({
   runs,
   risk,
   symbol,
+  safeSymbol,
   decimals,
 }: {
   runs: StrategyRun[];
   risk: VaultRisk | null;
   symbol: string;
+  safeSymbol: string;
   decimals: number;
 }) {
   // A cycle that trades nothing is operator detail. Show the trades and the
@@ -117,7 +119,7 @@ export function StrategyActivity({
               <tr>
                 <th className="pb-2 pr-4 font-normal">When</th>
                 <th className="pb-2 pr-4 font-normal">Action</th>
-                <th className="pb-2 pr-4 font-normal">Target</th>
+                <th className="pb-2 pr-4 font-normal">{symbol} share: before → target</th>
                 <th className="pb-2 pr-4 font-normal">Size</th>
                 <th className="pb-2 font-normal">Result</th>
               </tr>
@@ -126,12 +128,17 @@ export function StrategyActivity({
               {trades.map((run) => (
                 <tr key={run.id} className="border-t border-neutral-800">
                   <td className="py-2 pr-4 text-gray-400">{timeAgo(run.ts)}</td>
-                  <td className="py-2 pr-4">{ACTION_LABEL[run.action]}</td>
+                  <td className="py-2 pr-4">{actionLabel(run.action, symbol, safeSymbol)}</td>
                   <td className="py-2 pr-4 text-gray-400">
-                    {run.targetRiskyPct != null ? `${run.targetRiskyPct.toFixed(0)}% strategy` : "-"}
+                    {run.targetRiskyPct != null
+                      ? `${run.actualRiskyPct != null ? `${run.actualRiskyPct.toFixed(1)}% → ` : ""}${run.targetRiskyPct.toFixed(1)}%`
+                      : "-"}
                   </td>
                   <td className="py-2 pr-4 text-gray-400">
-                    {run.amountIn ? `${formatAmount(run.amountIn, decimals)} ${symbol}` : "-"}
+                    {/* amount_in is in the token sold: the safe asset on a buy, the risky asset on a sale */}
+                    {run.amountIn
+                      ? `${formatAmount(run.amountIn, decimals)} ${run.action === "buy_risky" ? safeSymbol : symbol}`
+                      : "-"}
                   </td>
                   <td className={`py-2 ${STATUS_STYLE[run.status] ?? "text-gray-400"}`}>
                     {STATUS_LABEL[run.status] ?? run.status}

@@ -30,18 +30,35 @@ export function toBaseUnits(amount: string, decimals: number): bigint {
   );
 }
 
-/** Native XLM balance of an account (0 if unfunded/unreachable). */
-export async function fetchNativeBalance(address: string): Promise<number> {
+/**
+ * Native XLM balance of an account. `funded` is false when the account does
+ * not exist on this network yet (Horizon answers 404): on testnet that is a
+ * wallet that never received test XLM, not an empty wallet.
+ */
+export async function fetchNativeBalance(
+  address: string
+): Promise<{ balance: number; funded: boolean }> {
   try {
     const res = await fetch(`${HORIZON_URL}/accounts/${address}`, { cache: "no-store" });
-    if (!res.ok) return 0;
+    if (res.status === 404) return { balance: 0, funded: false };
+    if (!res.ok) return { balance: 0, funded: true };
     const acc = (await res.json()) as {
       balances: { asset_type: string; balance: string }[];
     };
     const native = acc.balances.find((b) => b.asset_type === "native");
-    return native ? Number(native.balance) : 0;
+    return { balance: native ? Number(native.balance) : 0, funded: true };
   } catch {
-    return 0;
+    return { balance: 0, funded: true };
+  }
+}
+
+/** Testnet only: ask Friendbot to create and fund the account with test XLM. */
+export async function fundWithFriendbot(address: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://friendbot.stellar.org/?addr=${encodeURIComponent(address)}`);
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -104,9 +121,22 @@ export async function invokeVault(
     await new Promise((r) => setTimeout(r, 1000));
     const res = await server.getTransaction(sent.hash);
     if (res.status === "SUCCESS") return { hash: sent.hash };
-    if (res.status === "FAILED") {
-      throw new Error("Transaction failed onchain.");
-    }
+    if (res.status === "FAILED") throw new StaleQuoteError(sent.hash);
   }
   throw new Error("Timed out waiting for confirmation.");
+}
+
+/**
+ * The transaction was simulated, signed, then refused by the network with no
+ * state change. The usual cause: the price feed published a new round while
+ * the wallet was open, so the signed transaction reads ledger entries that its
+ * simulation did not declare. Signing again with a fresh simulation passes.
+ */
+export class StaleQuoteError extends Error {
+  hash: string;
+  constructor(hash: string) {
+    super("The price feed moved while you were signing. Please sign once more.");
+    this.name = "StaleQuoteError";
+    this.hash = hash;
+  }
 }
