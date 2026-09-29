@@ -1,17 +1,17 @@
 import os
 
 # CPPI with ratchet steps, risky asset XLM, safe asset USDC.
-# Ported from the 2025 Solana strategy (JitoSOL / USDC) with profit lock-in.
+# CPPI with profit lock-in and ratchet steps, ported from the 2025 strategy.
 #
-# PARAM: set with Wajih - do not default. The server does not start without these values.
-# Legacy Solana values, for reference only: floor 0.6, multiplier 8, profit_lockin 0.19,
-# limit order safety 1.02. The 2025-04-24 Solana backtest used profit_lockin 0.16.
+# PARAM: risk parameters, set per deployment. The server does not start without these values.
+# Earlier values, for reference only: floor 0.6, multiplier 8, profit_lockin 0.19,
+# limit order safety 1.02. The 2025-04-24 backtest used profit_lockin 0.16.
 
 
 def required_float(name):
     value = os.getenv(name)
     if value is None or value.strip() == "":
-        raise RuntimeError(f"Missing required env var: {name} (PARAM: set with Wajih)")
+        raise RuntimeError(f"Missing required env var: {name} (PARAM: risk parameter, set per deployment)")
     return float(value)
 
 

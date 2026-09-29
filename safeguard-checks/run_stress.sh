@@ -68,7 +68,7 @@ venue_pays_under() { # $1 = bps under the price
 
 keeper_cycle() { # prints the keeper decision line
   ( cd "$INDEXER" && \
-    KEEPER_ENABLED=true KEEPER_DRY_RUN=false KEEPER_VAULT_ID="$VAULT" KEEPER_ROUTER_ID="$ROUTER" \
+    KEEPER_ENABLED=true KEEPER_VAULT_ID="$VAULT" KEEPER_ROUTER_ID="$ROUTER" \
     KEEPER_OPERATOR_PUBLIC="$OPERATOR" KEEPER_OPERATOR_SECRET="$(stellar keys show "$SOURCE" 2>/dev/null)" \
     STRATEGY_ENGINE_URL="$ENGINE" KEEPER_REJECT_BACKOFF_SECONDS=0 \
     PATH="$HOME/.asdf/shims:$PATH" npx tsx src/scripts/keeper-once.ts 2>/dev/null \

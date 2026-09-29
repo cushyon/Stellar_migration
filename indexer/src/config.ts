@@ -40,7 +40,6 @@ export const config = {
   keeper: {
     enabled: (process.env.KEEPER_ENABLED ?? "false").toLowerCase() === "true",
     // Send nothing, only store the decision. Safe default.
-    dryRun: (process.env.KEEPER_DRY_RUN ?? "true").toLowerCase() !== "false",
     vaultId: process.env.KEEPER_VAULT_ID ?? req("VAULT_CONTRACT_ID"),
     // Only for a vault whose base asset is the safe asset. When the base asset
     // is the risky leg (the product shape), the keeper derives the roles from
@@ -49,7 +48,7 @@ export const config = {
     routerId: process.env.KEEPER_ROUTER_ID ?? "",
     engineUrl: process.env.STRATEGY_ENGINE_URL ?? "http://localhost:8000",
     engineTimeoutMs: Number(process.env.STRATEGY_ENGINE_TIMEOUT_MS ?? "15000"),
-    // Operator key. Never commit it. Without it the keeper stays in dry run.
+    // Operator key. Never commit it. Without it the keeper skips its cycle.
     operatorSecret: process.env.KEEPER_OPERATOR_SECRET ?? "",
     operatorPublicKey: process.env.KEEPER_OPERATOR_PUBLIC ?? "",
     // Rebalance only when the gap to the target is at least this large.

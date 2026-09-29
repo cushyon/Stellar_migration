@@ -29,6 +29,10 @@ export async function runKeeper(log?: Log): Promise<void> {
     log?.warn("[keeper] KEEPER_ROUTER_ID missing, cycle skipped");
     return;
   }
+  if (!config.keeper.operatorSecret || !config.keeper.operatorPublicKey) {
+    log?.warn("[keeper] operator key missing, cycle skipped");
+    return;
+  }
 
   const cfg = (await readContract(vault, "get_config")) as VaultConfig;
   const base = config.baseAssetId;
@@ -179,11 +183,6 @@ export async function runKeeper(log?: Log): Promise<void> {
     nativeToScVal(deadline, { type: "u64" }),
     xdr.ScVal.scvVec([]),
   ];
-
-  if (config.keeper.dryRun || !config.keeper.operatorSecret) {
-    log?.info(`[keeper] dry run ${action} amount_in=${amountIn} min_out=${minOut} nonce=${nonce}`);
-    return record(vault, action, "dry_run", { ...common, amountIn, minOut, nonce });
-  }
 
   try {
     const { hash } = await invokeContract(vault, "execute_strategy", args, config.keeper.operatorSecret);

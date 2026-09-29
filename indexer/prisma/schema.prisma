@@ -7,8 +7,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// One row per onchain contract event. `id` is the event TOID — globally
-/// sortable and unique — so re-ingestion is idempotent (dedup key).
+/// One row per onchain contract event. `id` is the event TOID - globally
+/// sortable and unique - so re-ingestion is idempotent (dedup key).
 model StellarEvent {
   id         String   @id
   ledger     Int
@@ -24,7 +24,7 @@ model StellarEvent {
   @@map("stellar_event")
 }
 
-/// Periodic NAV/metrics snapshot for a vault — feeds TVL, allocation split,
+/// Periodic NAV/metrics snapshot for a vault - feeds TVL, allocation split,
 /// and historical performance. nav/shares stored as exact NUMERIC (i128-safe).
 model VaultSnapshot {
   id          Int      @id @default(autoincrement())
@@ -66,7 +66,7 @@ model IngestState {
 /// historical window can be backfilled locally. Served to the dashboard chart.
 model PriceSnapshot {
   symbol   String
-  bucket   Int // unix hour bucket — dedup key
+  bucket   Int // unix hour bucket - dedup key
   ts       DateTime
   priceUsd Float    @map("price_usd")
 
@@ -89,13 +89,13 @@ model StrategyState {
 }
 
 /// One keeper decision. It records the proposal even when the keeper does not
-/// send it (no drift, cooldown, dry run) and the vault answer when it does.
+/// send it (no drift, cooldown, stop) and the vault answer when it does.
 model StrategyRun {
   id         Int      @id @default(autoincrement())
   vault      String
   ts         DateTime @default(now())
   action     String // hold | buy_risky | sell_risky
-  status     String // skipped | dry_run | submitted | rejected | unknown
+  status     String // skipped | submitted | rejected | unknown
   targetRiskyPct Float?  @map("target_risky_pct")
   actualRiskyPct Float?  @map("actual_risky_pct")
   amountIn   Decimal? @db.Decimal(40, 0) @map("amount_in")

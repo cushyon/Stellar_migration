@@ -229,7 +229,7 @@ macro_rules! setup {
     };
 }
 
-// Deliberate test values. Production values are PARAM: set with Wajih.
+// Deliberate test values. Production values are PARAM: risk parameters, set per deployment.
 const TEST_FLOOR_BPS: u32 = 6_000; // 60% of the epoch-start share value is protected
 const TEST_LOCKIN_BPS: u32 = 1_900; // the floor rises one step for each 19% gained
 const TEST_DEVIATION_BPS: u32 = 500; // 5% lastprice-vs-twap halt threshold

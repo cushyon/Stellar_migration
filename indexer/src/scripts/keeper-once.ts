@@ -1,12 +1,12 @@
 // Run one keeper cycle and print what it decided. Useful to try a change
-// without waiting for the poller. The keeper obeys KEEPER_DRY_RUN.
+// without waiting for the poller. It sends the trade when the operator key is set.
 import { runKeeper } from "../keeper.js";
 import { prisma } from "../db.js";
 import { config } from "../config.js";
 
 const log = { info: console.log, warn: console.warn, error: console.error };
 console.log(
-  `[keeper-once] vault=${config.keeper.vaultId} enabled=${config.keeper.enabled} dryRun=${config.keeper.dryRun}`
+  `[keeper-once] vault=${config.keeper.vaultId} enabled=${config.keeper.enabled}`
 );
 
 await runKeeper(log);

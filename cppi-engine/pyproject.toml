@@ -31,7 +31,7 @@ matplotlib = "3.11.1"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-# Test values only (the legacy Solana parameters). Production values: PARAM, set with Wajih.
+# Test values only (the earlier parameter set). Production values: PARAM, set per deployment.
 env = [
     "ENVIRONMENT=test",
     "CPPI_FLOOR=0.6",

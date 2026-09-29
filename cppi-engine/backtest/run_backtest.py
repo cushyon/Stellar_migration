@@ -15,7 +15,7 @@ Changes from the SOL script:
 4. The grid runs vectorized (all parameter sets at the same time), in seconds.
 5. The 3D chart uses the score array (the SOL script indexed a list like a dict and crashed).
 6. New outputs: ties at the best score, a second ranking of the tied sets, floor breach events,
-   days below the floor, max drawdown, XLM buy and hold, and the Solana parameter sets for comparison.
+   days below the floor, max drawdown, XLM buy and hold, and the earlier parameter sets for comparison.
 
 Run from cppi-engine/:
   poetry run python backtest/run_backtest.py                                    # 2023-2026
@@ -46,9 +46,9 @@ MULTIPLIERS = [round(x, 2) for x in np.arange(3, 9, 0.5)]  # 12 values, 3 to 8.5
 FLOORS = [round(x, 2) for x in np.arange(0.6, 0.9, 0.01)]  # 31 values, 0.60 to 0.90 (float rounding adds 0.90)
 PROFIT_LOCKINS = [round(x, 2) for x in np.arange(0.01, 0.2, 0.01)]  # 19 values, 0.01 to 0.19
 
-COMPARISON_HOURS = [3, 15, 16]  # 3 and 15 as in the SOL script, 16 = hour of the live Solana cron
+COMPARISON_HOURS = [3, 15, 16]  # 3 and 15 as in the earlier backtest, 16 = hour of the earlier daily cron
 
-# Parameter sets of the Solana strategy, shown for comparison
+# Earlier parameter sets, shown for comparison
 REFERENCE_SETS = {
     "legacy_code_2025_04": (8.0, 0.6, 0.19),  # python_backend executionfile.py, first version
     "sol_backtest_2025_04": (8.0, 0.6, 0.16),  # cppi_backtest_results_optim.pdf

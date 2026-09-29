@@ -52,7 +52,7 @@ pub struct StrategyConfig {
     /// Hard onchain cap on realized slippage vs the oracle price, in bps:
     /// `amount_out` must be >= oracle-expected output * (1 - max_slippage_bps).
     /// Backstops the operator-supplied `min_amount_out`, which can only ever be
-    /// tighter, never looser. PARAM: set with Wajih - do not default.
+    /// tighter, never looser. PARAM: risk parameter, set per deployment.
     pub max_slippage_bps: u32,
 
     // --- Value floor (Decision 3, revised 2026-09-27) ---------------------
@@ -64,11 +64,11 @@ pub struct StrategyConfig {
     /// Protected share of the epoch-start share value, in bps (6000 = 60%).
     /// A trade that adds risk must keep the share value at or above the floor;
     /// once the value is at or under it, the strategy stops.
-    /// PARAM: set with Wajih - do not default.
+    /// PARAM: risk parameter, set per deployment.
     pub floor_bps: u32,
     /// Profit lock-in step, in bps of the epoch-start value. Each new high
     /// that clears one more step raises the floor by that step. 0 disables it.
-    /// PARAM: set with Wajih - do not default.
+    /// PARAM: risk parameter, set per deployment.
     pub lockin_bps: u32,
 
     // --- Oracle / circuit breaker (Decision 4) ----------------------------
@@ -80,29 +80,26 @@ pub struct StrategyConfig {
     /// Reflector's CEX/DEX feed is keyed by symbol (e.g. "XLM", "USDC"), so the
     /// vault needs this to price the tokens it holds by address.
     pub asset_symbols: Map<Address, Symbol>,
-    /// Max |lastprice − twap| / twap before execution halts, in bps.
-    /// PARAM: set with Wajih - do not default.
+    /// Max |lastprice - mean of the recent prices| / mean before execution halts, in bps.
+    /// PARAM: risk parameter, set per deployment.
     pub deviation_bps: u32,
     /// Max price age (seconds) before a quote is rejected as stale.
-    /// PARAM: set with Wajih - do not default.
+    /// PARAM: risk parameter, set per deployment.
     pub staleness: u64,
 
     // --- Inflation protection (Decision 2) --------------------------------
     /// Virtual-share offset exponent: the share-supply term in the conversion
     /// math is `total_supply + 10^decimals_offset` (the asset term is `+1`),
     /// per OZ ERC-4626. Hardening over the weakest setting (0).
-    /// PARAM: set with Wajih - do not default.
+    /// PARAM: risk parameter, set per deployment.
     pub decimals_offset: u32,
 
-    // --- Fee scaffolding (Decision 6) -------------------------------------
-    // INERT in Tranche 1: stored and documented as a deliberate zero-fee MVP,
-    // but never applied to any deposit/withdraw/strategy math. Active fee
-    // accrual (management + performance) lands in Tranche 3 (D9). Surfaced
-    // here so the storage layout is forward-compatible and "zero fees" is an
-    // explicit, on-chain choice rather than a silent omission.
-    /// Management fee, bps/year. Reserved; must be 0 for Tranche 1.
+    // --- Fees (Decision 6) ------------------------------------------------
+    // Accrued by `fees.rs`. A zero-fee vault sets both to 0, as an explicit
+    // onchain choice rather than a silent omission.
+    /// Management fee, bps of the NAV per year. PARAM: risk parameter, set per deployment.
     pub mgmt_fee_bps: u32,
-    /// Performance fee, bps of profit. Reserved; must be 0 for Tranche 1.
+    /// Performance fee, bps of the profit. PARAM: risk parameter, set per deployment.
     pub perf_fee_bps: u32,
 }
 

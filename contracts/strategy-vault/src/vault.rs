@@ -9,7 +9,7 @@ use crate::storage;
 /// this resists first-depositor inflation/donation attacks; a larger
 /// `decimals_offset` gives the victim more share precision so their deposit
 /// cannot round to zero after a donation. `decimals_offset` is a deliberate
-/// security parameter - see `StrategyConfig`. PARAM: set with Wajih.
+/// security parameter - see `StrategyConfig`. PARAM: risk parameter, set per deployment.
 fn supply_offset(e: &Env) -> i128 {
     let offset = storage::get_config(e).decimals_offset;
     10_i128.checked_pow(offset).unwrap_or(i128::MAX)

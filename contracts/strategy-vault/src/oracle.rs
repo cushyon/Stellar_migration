@@ -50,7 +50,7 @@ pub trait ReflectorOracle {
 }
 
 /// Number of recent records to average for the deviation reference.
-/// PARAM: set with Wajih - do not default.
+/// PARAM: risk parameter, set per deployment.
 const DEVIATION_RECORDS: u32 = 6;
 
 /// Validated price of one `asset` unit denominated in the BASE asset, scaled by
@@ -61,7 +61,7 @@ const DEVIATION_RECORDS: u32 = 6;
 /// staleness-checked; the asset leg is also deviation-checked (`lastprice` vs
 /// the mean of recent `prices`). Assumes base and asset share token decimals
 /// (true for the XLM/USDC SACs); a cross-decimal adjustment is a documented
-/// follow-up. PARAM: confirm with Wajih.
+/// follow-up. PARAM: risk parameter, set per deployment.
 ///
 /// Reverts on [`VaultError::PriceUnavailable`] (no quote / unmapped symbol /
 /// ≤0), [`VaultError::OracleStale`], or [`VaultError::OracleDeviation`]. The

@@ -103,7 +103,7 @@ async def health_check():
     }
 
 
-# Same body as the Solana endpoint (/strategy/solana), so the orchestrator code stays the same.
+# Same request body as the earlier strategy endpoint, so the orchestrator code stays the same.
 class StellarStrategyRequest(BaseModel):
     price_risky: float  # Latest price of the risky asset (XLM, USD)
     price_safe: float  # Latest price of the safe asset (USDC, USD)

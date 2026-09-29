@@ -17,7 +17,7 @@
 //!
 //! Values are scaled by `PRICE_SCALE`. The safe asset is assumed to share the
 //! base decimals (XLM and USDC both use 7). PARAM: `floor_bps` and `lockin_bps`
-//! are set with Wajih - do not default.
+//! are risk parameters, set per deployment.
 
 use soroban_sdk::{contracttype, Env};
 
