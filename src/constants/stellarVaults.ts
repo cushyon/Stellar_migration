@@ -27,7 +27,7 @@ const STELLAR_VAULT_1: StellarVaultConfig = {
   // leg, Soroswap testnet USDC as the safe leg, Reflector oracle, Soroswap adapter.
   contractId: "CCY7NP6KLDWLPC2IKJYSKSXJPHAZWZPNHONBYVLYKRSHKN5KMPPVWVP6",
   description:
-    "60% capital guarantee and profit lock-in, invested in XLM with automated rebalancing on Stellar",
+    "60% capital guarantee and profit lock-in",
   floorBps: 6000,
   safeSymbol: "USDC",
   safeIcon: "/icons/usdc.svg",

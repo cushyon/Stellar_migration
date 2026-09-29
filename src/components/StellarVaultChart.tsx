@@ -55,18 +55,27 @@ const AREA_ID = "cushion-vault-area";
 
 const isRoi = (t: GraphType) => t === "roi" || t === "usdRoi";
 
-function millify(v: number): string {
+function millify(v: number, decimals = 0): string {
   const a = Math.abs(v);
   if (a >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (a >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-  return v.toFixed(0);
+  return v.toFixed(decimals);
 }
 
-function fmtValue(type: GraphType, v: number): string {
+function fmtValue(type: GraphType, v: number, decimals = 0): string {
   // strip trailing .00 so round ticks read "15%" but the tooltip keeps "9.44%"
   if (isRoi(type)) return `${parseFloat(v.toFixed(2))}%`;
   if (type === "sharePrice") return v.toFixed(4);
-  return millify(v);
+  return millify(v, decimals);
+}
+
+// Decimals that tell two neighbouring ticks apart: a NAV that moves between
+// 100.1 and 100.6 XLM must not read "100, 100, 100" down the axis.
+function tickDecimals(ticks: number[]): number {
+  if (ticks.length < 2) return 0;
+  const step = Math.abs(ticks[1] - ticks[0]);
+  if (!(step > 0)) return 0;
+  return Math.max(0, Math.ceil(-Math.log10(step)));
 }
 
 export function StellarVaultChart({
@@ -133,6 +142,7 @@ export function StellarVaultChart({
   const { domain: yDomain, ticks: yTicks } = isRoi(type)
     ? niceScale(-maxAbs, maxAbs)
     : niceScale(minY, maxY);
+  const yDecimals = tickDecimals(yTicks);
 
   // Adapt the x-axis to the actual span: a fresh vault covers hours/days, the
   // longer views cover weeks - never repeat the same DD/MM across ticks.
@@ -218,7 +228,7 @@ export function StellarVaultChart({
                   strokeWidth={2}
                   isFront
                   label={currentValueLabel(
-                    `${fmtValue(type, last.value)}${type === "tvl" ? ` ${symbol}` : ""}`
+                    `${fmtValue(type, last.value, 2)}${type === "tvl" ? ` ${symbol}` : ""}`
                   )}
                 />
               )}
@@ -239,7 +249,7 @@ export function StellarVaultChart({
                 domain={yDomain}
                 ticks={yTicks}
                 interval={0}
-                tickFormatter={(t: number) => fmtValue(type, t)}
+                tickFormatter={(t: number) => fmtValue(type, t, yDecimals)}
               />
               <Tooltip
                 cursor={{ strokeDasharray: "4", stroke: AXIS_STROKE }}
@@ -251,7 +261,7 @@ export function StellarVaultChart({
                     <div className="flex flex-col gap-1 p-2 rounded border border-neutral-700 bg-neutral-950">
                       <span className="text-xs text-gray-400">{date}</span>
                       <span className="text-sm font-semibold" style={{ color: LINE_COLOR }}>
-                        {fmtValue(type, v)}
+                        {fmtValue(type, v, 2)}
                         {type === "tvl" ? ` ${symbol}` : ""}
                       </span>
                     </div>
