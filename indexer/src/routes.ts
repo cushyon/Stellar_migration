@@ -53,11 +53,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Keeper decisions, newest first: what it proposed and what the vault answered.
+  // ?trades=1 leaves out the hold rows: the keeper writes one per cycle, so
+  // the trades would otherwise fall out of any recent window within minutes.
   app.get("/vaults/:id/strategy-runs", async (req) => {
     const { id } = req.params as { id: string };
-    const { limit } = req.query as { limit?: string };
+    const { limit, trades } = req.query as { limit?: string; trades?: string };
     return prisma.strategyRun.findMany({
-      where: { vault: id },
+      where: trades === "1" ? { vault: id, action: { not: "hold" } } : { vault: id },
       orderBy: { ts: "desc" },
       take: Math.min(Number(limit ?? "50"), 500),
     });

@@ -72,8 +72,9 @@ export function StrategyActivity({
 }) {
   // A cycle that trades nothing is operator detail. Show the trades and the
   // refusals, and say when the strategy last looked at the vault.
-  const trades = runs.filter((run) => run.action !== "hold").slice(0, 6);
-  const lastCheck = runs[0];
+  const trades = runs.filter((run) => run.action !== "hold").slice(0, 8);
+  // The risk snapshot is written every cycle, so it says when the strategy last looked.
+  const lastCheck = risk?.ts ?? null;
   // The header stays empty while everything is normal. It speaks only when
   // the vault is paused, the price feed is down, or the strategy has stopped.
   const warnings: { text: string; tone: string }[] = [];
@@ -98,7 +99,7 @@ export function StrategyActivity({
 
       {lastCheck && (
         <p className="mt-2 text-xs text-gray-500">
-          Strategy last checked the vault {timeAgo(lastCheck.ts)}.
+          Strategy last checked the vault {timeAgo(lastCheck)}.
         </p>
       )}
 

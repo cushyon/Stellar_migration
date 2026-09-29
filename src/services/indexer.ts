@@ -163,10 +163,15 @@ export async function fetchVaultRisk(contractId: string): Promise<VaultRisk | nu
   }
 }
 
-/** Recent strategy decisions, newest first. */
-export async function fetchStrategyRuns(contractId: string, limit = 8): Promise<StrategyRun[]> {
+/** Recent strategy decisions, newest first. `tradesOnly` leaves out the hold rows. */
+export async function fetchStrategyRuns(
+  contractId: string,
+  limit = 8,
+  tradesOnly = false
+): Promise<StrategyRun[]> {
   try {
-    const res = await fetch(`${BASE}/vaults/${contractId}/strategy-runs?limit=${limit}`, {
+    const query = `limit=${limit}${tradesOnly ? "&trades=1" : ""}`;
+    const res = await fetch(`${BASE}/vaults/${contractId}/strategy-runs?${query}`, {
       cache: "no-store",
     });
     if (!res.ok) return [];

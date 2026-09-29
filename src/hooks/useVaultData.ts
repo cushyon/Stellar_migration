@@ -185,13 +185,13 @@ export function useVaultRisk(contractId: string) {
   return risk;
 }
 
-export function useStrategyRuns(contractId: string, limit = 8) {
+export function useStrategyRuns(contractId: string, limit = 8, tradesOnly = false) {
   const [runs, setRuns] = useState<StrategyRun[]>([]);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const r = await fetchStrategyRuns(contractId, limit);
+      const r = await fetchStrategyRuns(contractId, limit, tradesOnly);
       if (active) setRuns(r);
     };
     load();
@@ -202,7 +202,7 @@ export function useStrategyRuns(contractId: string, limit = 8) {
       clearInterval(t);
       unsub();
     };
-  }, [contractId, limit]);
+  }, [contractId, limit, tradesOnly]);
 
   return runs;
 }

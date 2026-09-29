@@ -493,7 +493,7 @@ export default function StellarVaultPage(props: {
   const risk = useVaultRisk(vaultConfig?.contractId ?? "");
   // Enough rows that the last trades are in the window: a quiet keeper writes
   // one "hold" row per cycle.
-  const runs = useStrategyRuns(vaultConfig?.contractId ?? "", 60);
+  const runs = useStrategyRuns(vaultConfig?.contractId ?? "", 20, true);
 
   const [activeTab, setActiveTab] = useState<ContentTab>("VaultPerformance");
 
