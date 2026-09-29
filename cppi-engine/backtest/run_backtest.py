@@ -381,13 +381,89 @@ def run_backtest(safe_yield, data, period):
 
 
 # 5. Run the complete backtest
+def run_set(safe_yield, data, period, multiplier, floor, profit_lockin):
+    """One parameter set, all 24 rebalance hours: a NAV chart and the metrics per hour.
+
+    The grid search picks its own sets. This reports the set that a deployment
+    uses, so the chart and the numbers match the vault.
+    """
+    label = f"{period}_safe{round(safe_yield * 100)}_M{multiplier:g}_F{floor:g}_P{profit_lockin:g}"
+    prices = load_prices(safe_yield, data)
+    results, rows = {}, []
+    for hour in range(24):
+        reb_prices = rebalance_prices(prices, hour)
+        returns = reb_prices.pct_change().dropna()
+        initial_capital = reb_prices["Risky"].iloc[0]
+        run = simulate(
+            returns["Risky"].to_numpy(), returns["Safe"].to_numpy(),
+            [multiplier], [floor], [profit_lockin], initial_capital, record=True
+        )
+        results_df = pd.DataFrame({
+            "NAV": run["history"]["nav"][:, 0],
+            "Risky": reb_prices["Risky"].to_numpy()[1:],
+            "Safe": reb_prices["Safe"].to_numpy()[1:],
+        }, index=returns.index)
+        for col in ["NAV", "Risky", "Safe"]:
+            results_df[col] = results_df[col] / results_df[col].iloc[0] * 100
+        results[hour] = results_df
+        metrics = calculate_risk_metrics(results_df["NAV"].pct_change().dropna())
+        rows.append({
+            "hour": hour,
+            "final_nav": round(float(results_df["NAV"].iloc[-1]), 2),
+            "final_xlm": round(float(results_df["Risky"].iloc[-1]), 2),
+            "sharpe": round(float(metrics["Sharpe"]), 3),
+            "sortino": round(float(metrics["Sortino"]), 3),
+            "nav_max_drawdown": round(max_drawdown(results_df["NAV"]), 4),
+            "xlm_max_drawdown": round(max_drawdown(results_df["Risky"]), 4),
+            "breach_events": int(run["breach_events"][0]),
+            "days_below_floor": int(run["days_below_floor"][0]),
+        })
+    summary_df = pd.DataFrame(rows).set_index("hour")
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    summary_df.to_csv(RESULTS / f"xlm_cppi_{label}_hours.csv")
+
+    fig = plt.figure(figsize=(14, 7))
+    for hour in COMPARISON_HOURS:
+        plt.plot(results[hour].index, results[hour]["NAV"], label=f"CPPI NAV, rebalance at {hour}:00 UTC")
+    plt.plot(results[16].index, results[16]["Risky"], label="XLM price", color="gray", alpha=0.5)
+    plt.axhline(y=floor * 100, color="#C9A227", linestyle="--", label=f"Floor at start ({floor:.0%})")
+    plt.title(
+        f"XLM CPPI, {period.replace('_', ' to ')}, safe yield {safe_yield:.0%}. "
+        f"Multiplier {multiplier:g}, floor {floor:.2f}, lock-in step {profit_lockin:.2f}"
+    )
+    plt.xlabel("Date")
+    plt.ylabel("Value (start = 100)")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(RESULTS / f"xlm_cppi_{label}.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"\n=== {label} ===")
+    print(f"mean final NAV {summary_df['final_nav'].mean():.1f}, worst hour {summary_df['final_nav'].min():.1f}, "
+          f"XLM buy and hold {summary_df['final_xlm'].mean():.1f}")
+    print(f"NAV max drawdown (mean over hours) {summary_df['nav_max_drawdown'].mean():.1%}, "
+          f"XLM max drawdown {summary_df['xlm_max_drawdown'].mean():.1%}")
+    print(f"floor breaches {int(summary_df['breach_events'].sum())}, hours that end under the floor "
+          f"{int((summary_df['final_nav'] < floor * 100).sum())} of 24, days below floor {int(summary_df['days_below_floor'].sum())}")
+    return summary_df
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="XLM CPPI backtest with ratchet steps")
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA, help="price CSV from fetch_prices.py")
     parser.add_argument("--label", help="period label for the file names (default: taken from the CSV name)")
+    parser.add_argument("--set", nargs=3, type=float, metavar=("MULTIPLIER", "FLOOR", "LOCKIN"),
+                        help="report one parameter set instead of the grid search")
     args = parser.parse_args()
     # xlmusdt_15m_2023_2026.csv -> 2023_2026
     period = args.label or "_".join(args.data.stem.split("_")[-2:])
+
+    if args.set:
+        multiplier, floor, profit_lockin = args.set
+        for safe_yield in SAFE_YIELDS:
+            run_set(safe_yield, args.data, period, multiplier, floor, profit_lockin)
+        print(f"\nReports saved in {RESULTS}")
+        raise SystemExit(0)
 
     summaries = [run_backtest(safe_yield, args.data, period) for safe_yield in SAFE_YIELDS]
     with open(RESULTS / f"summary_{period}.json", "w") as f:
