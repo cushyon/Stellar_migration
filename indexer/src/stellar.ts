@@ -103,7 +103,29 @@ export class ContractCallError extends Error {
 
 /// Sign and send a contract call, then wait for the result. The source account
 /// signs, so a `require_auth` on that address needs no extra signature.
+///
+/// A transaction that the network refuses after a passing simulation changed
+/// nothing. The usual cause is a Reflector round published between the
+/// simulation and the send: the oracle entries move and the footprint no longer
+/// names them. One fresh simulation and send is enough, so it is tried once.
 export async function invokeContract(
+  contractId: string,
+  method: string,
+  args: xdr.ScVal[],
+  secret: string
+): Promise<{ hash: string }> {
+  try {
+    return await invokeOnce(contractId, method, args, secret);
+  } catch (e) {
+    const error = e as ContractCallError;
+    if (error.message !== REFUSED_AFTER_SIMULATION) throw e;
+    return invokeOnce(contractId, method, args, secret);
+  }
+}
+
+const REFUSED_AFTER_SIMULATION = "the network refused the signed transaction";
+
+async function invokeOnce(
   contractId: string,
   method: string,
   args: xdr.ScVal[],
@@ -143,7 +165,8 @@ export async function invokeContract(
       const got = await server.getTransaction(sent.hash);
       if (got.status === rpc.Api.GetTransactionStatus.SUCCESS) return { hash: sent.hash };
       if (got.status === rpc.Api.GetTransactionStatus.FAILED) {
-        throw new ContractCallError(`tx failed onchain`, null, true, sent.hash);
+        // Definitive and without effect: the ledger holds the refusal.
+        throw new ContractCallError(REFUSED_AFTER_SIMULATION, null, false, sent.hash);
       }
     } catch (e) {
       if (e instanceof ContractCallError) throw e;
