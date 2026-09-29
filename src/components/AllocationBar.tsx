@@ -1,11 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import type { VaultStats, VaultRisk } from "@/services/indexer";
 import { formatAmount } from "@/lib/format";
 
 /**
  * How the vault is invested right now, from indexed onchain balances, and
- * where its value stands against the protection floor. The bar shows the safe
+ * where its value stands against the protection floor. The bar shows the risky
  * share of the vault; the floor is a value the share may not fall under, so it
  * is drawn on its own scale below, from the epoch start value.
  */
@@ -13,14 +14,18 @@ export function AllocationBar({
   stats,
   risk,
   symbol,
+  icon,
   safeSymbol,
+  safeIcon,
   decimals,
   floorBps,
 }: {
   stats: VaultStats | null;
   risk: VaultRisk | null;
   symbol: string;
+  icon: string;
   safeSymbol: string;
+  safeIcon: string;
   decimals: number;
   floorBps: number;
 }) {
@@ -58,24 +63,31 @@ export function AllocationBar({
         </p>
       )}
 
+      {/* The filled part is the risky asset; the rest of the bar is the safe asset. */}
       <div className="relative mt-4 h-6 w-full overflow-hidden rounded bg-neutral-800">
         <div
           className={`h-full ${stopped ? "bg-red-500/70" : "bg-[#475569]"}`}
-          style={{ width: `${Math.min(Math.max(safePct, 0), 100)}%` }}
+          style={{ width: `${Math.min(Math.max(strategyPct, 0), 100)}%` }}
         />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
         <div className="flex flex-col gap-1">
-          <span className="text-gray-400">Safe ({safeSymbol})</span>
+          <span className="flex items-center gap-1.5 text-gray-400">
+            <Image src={icon} alt="" width={16} height={16} />
+            Risky asset ({symbol})
+          </span>
           <span>
-            {safePct.toFixed(1)}% · {formatAmount(safeAmount, decimals)} {symbol}
+            {strategyPct.toFixed(1)}% · {formatAmount(strategyAmount, decimals)} {symbol}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-gray-400">Strategy ({symbol})</span>
+          <span className="flex items-center gap-1.5 text-gray-400">
+            <Image src={safeIcon} alt="" width={16} height={16} />
+            Safe asset ({safeSymbol})
+          </span>
           <span>
-            {strategyPct.toFixed(1)}% · {formatAmount(strategyAmount, decimals)} {symbol}
+            {safePct.toFixed(1)}% · {formatAmount(safeAmount, decimals)} {symbol}
           </span>
         </div>
         <div className="flex flex-col gap-1">

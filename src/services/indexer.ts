@@ -140,7 +140,7 @@ export interface StrategyRun {
   vault: string;
   ts: string;
   action: "hold" | "buy_risky" | "sell_risky";
-  status: "skipped" | "dry_run" | "submitted" | "rejected" | "unknown";
+  status: "skipped" | "submitted" | "rejected" | "unknown";
   targetRiskyPct: number | null;
   actualRiskyPct: number | null;
   amountIn: string | null;

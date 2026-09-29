@@ -14,7 +14,6 @@ const STATUS_STYLE: Record<StrategyRun["status"], string> = {
   submitted: "text-green-400",
   rejected: "text-red-400",
   unknown: "text-yellow-400",
-  dry_run: "text-gray-400",
   skipped: "text-gray-500",
 };
 
@@ -22,7 +21,6 @@ const STATUS_LABEL: Record<StrategyRun["status"], string> = {
   submitted: "executed onchain",
   rejected: "refused by the vault",
   unknown: "sent, not confirmed",
-  dry_run: "simulated",
   skipped: "no trade",
 };
 
@@ -135,8 +133,8 @@ export function StrategyActivity({
                   <td className="py-2 pr-4 text-gray-400">
                     {run.amountIn ? `${formatAmount(run.amountIn, decimals)} ${symbol}` : "-"}
                   </td>
-                  <td className={`py-2 ${STATUS_STYLE[run.status]}`}>
-                    {STATUS_LABEL[run.status]}
+                  <td className={`py-2 ${STATUS_STYLE[run.status] ?? "text-gray-400"}`}>
+                    {STATUS_LABEL[run.status] ?? run.status}
                     {run.errorCode != null &&
                       `: ${REFUSAL_REASON[run.errorCode] ?? `error ${run.errorCode}`}`}
                     {run.txHash && (

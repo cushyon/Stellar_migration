@@ -16,6 +16,8 @@ export type StellarVaultConfig = {
   asset: StellarAssetConfig;
   /** Symbol of the safe leg the floor is measured in. */
   safeSymbol: string;
+  /** Icon of the safe leg. */
+  safeIcon: string;
 };
 
 const STELLAR_VAULT_1: StellarVaultConfig = {
@@ -28,6 +30,7 @@ const STELLAR_VAULT_1: StellarVaultConfig = {
     "60% capital guarantee and profit lock-in, invested in XLM with automated rebalancing on Stellar",
   floorBps: 6000,
   safeSymbol: "USDC",
+  safeIcon: "/icons/usdc.svg",
   asset: {
     symbol: "XLM",
     decimals: 7,
