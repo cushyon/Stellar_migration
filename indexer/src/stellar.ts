@@ -46,6 +46,25 @@ export async function readContract(
   return retval ? scValToNative(retval) : null;
 }
 
+/// Run `reads` between two reads of the share supply, and accept the result
+/// only when the supply did not move in between. Each RPC read sees its own
+/// ledger: a deposit that lands between the NAV read and the supply read gives
+/// two numbers that do not belong together, and a share price that is false by
+/// the size of the deposit. Three tries, then the caller skips this cycle.
+export async function readWithSupply<T>(
+  vault: string,
+  reads: () => Promise<T>,
+  tries = 3
+): Promise<{ supply: bigint; value: T }> {
+  for (let attempt = 1; ; attempt++) {
+    const before = BigInt((await readContract(vault, "total_supply")) as bigint);
+    const value = await reads();
+    const after = BigInt((await readContract(vault, "total_supply")) as bigint);
+    if (before === after) return { supply: before, value };
+    if (attempt >= tries) throw new Error("the share supply moved during the reads");
+  }
+}
+
 export function addressArg(addr: string): xdr.ScVal {
   return new Address(addr).toScVal();
 }

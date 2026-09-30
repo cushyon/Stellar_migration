@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db.js";
 import { config } from "./config.js";
-import { readContract, addressArg } from "./stellar.js";
+import { readContract, addressArg, readWithSupply } from "./stellar.js";
 import { notifyAlerts, type Alert } from "./alerts.js";
 
 const PRICE_SCALE = 1e14; // the vault returns prices and share values with 14 decimals
@@ -55,26 +55,35 @@ export async function takeRiskSnapshot(
 
   const cfg = (await readContract(vault, "get_config")) as VaultConfig;
   const paused = (await readContract(vault, "paused")) as boolean;
-  const supply = BigInt((await readContract(vault, "total_supply")) as bigint);
   const epoch = (await readContract(vault, "get_epoch")) as EpochState;
   const safeIsBase = cfg.safe_asset === config.baseAssetId;
 
   // NAV and the share value need the oracle for every non-base leg, so a
-  // failure here is an oracle alert.
+  // failure there is an oracle alert. The reads run between two reads of the
+  // supply, so NAV, balance and supply describe the same moment.
   let nav = 0n;
   let valueScaled = 0n;
   let oracleOk = true;
-  try {
-    nav = BigInt((await readContract(vault, "total_assets")) as bigint);
-    valueScaled = BigInt((await readContract(vault, "share_value_safe")) as bigint);
-  } catch (e) {
-    oracleOk = false;
-    alerts.push({ key: "oracle", message: `share value unavailable: ${(e as Error).message}` });
-  }
-
-  const baseBalance = BigInt(
-    (await readContract(config.baseAssetId, "balance", [addressArg(vault)])) as bigint
-  );
+  const { supply, value: read } = await readWithSupply(vault, async () => {
+    let navRead = 0n;
+    let valueRead = 0n;
+    let ok = true;
+    try {
+      navRead = BigInt((await readContract(vault, "total_assets")) as bigint);
+      valueRead = BigInt((await readContract(vault, "share_value_safe")) as bigint);
+    } catch (e) {
+      ok = false;
+      alerts.push({ key: "oracle", message: `share value unavailable: ${(e as Error).message}` });
+    }
+    const baseBalance = BigInt(
+      (await readContract(config.baseAssetId, "balance", [addressArg(vault)])) as bigint
+    );
+    return { navRead, valueRead, ok, baseBalance };
+  });
+  nav = read.navRead;
+  valueScaled = read.valueRead;
+  oracleOk = read.ok;
+  const baseBalance = read.baseBalance;
 
   const navNum = Number(nav);
   const basePct = navNum > 0 ? Number(baseBalance) / navNum : 1;

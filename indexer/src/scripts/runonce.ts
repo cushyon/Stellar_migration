@@ -4,7 +4,7 @@ import { prisma } from "../db.js";
 
 const n = await ingestOnce({ info: console.log, error: console.error });
 console.log("inserted this run:", n);
-await takeSnapshot({ info: console.log });
+await takeSnapshot({ info: console.log, warn: console.warn });
 
 const total = await prisma.stellarEvent.count();
 const byType = await prisma.stellarEvent.groupBy({ by: ["type"], _count: true });
