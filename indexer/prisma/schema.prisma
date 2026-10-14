@@ -14,7 +14,7 @@ model StellarEvent {
   ledger     Int
   ts         DateTime
   contractId String   @map("contract_id")
-  type       String // deposit | withdraw | transfer | approve | burn | strategy | paused | unpaused
+  type       String // deposit | withdraw | transfer | approve | burn | fees | strategy | paused | unpaused
   topic      Json
   data       Json
   createdAt  DateTime @default(now()) @map("created_at")
@@ -150,4 +150,53 @@ model AlertState {
 
   @@index([vault, active])
   @@map("alert_state")
+}
+
+/// One referral code per wallet, created on demand by the API. A referred
+/// wallet writes `ref:CODE` in the memo of its first deposit.
+model ReferralCode {
+  code      String   @id
+  address   String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("referral_code")
+}
+
+/// A referred wallet, bound to its referrer by a message that the wallet
+/// signed (SEP-53). `message` and `signature` are the proof: anyone can repeat
+/// the check. The first binding stays: a wallet never changes referrer.
+/// The deposit fields are filled when the first deposit of the wallet arrives.
+model Referral {
+  vault     String
+  referee   String
+  referrer  String
+  code      String
+  message   String
+  signature String
+  claimedAt DateTime  @default(now()) @map("claimed_at")
+  depositTx String?   @map("deposit_tx")
+  ledger    Int?
+  ts        DateTime?
+
+  @@id([vault, referee])
+  @@index([vault, referrer])
+  @@map("referral")
+}
+
+/// The referrer's share of one performance fee event, in vault shares.
+/// Pending until the treasury pays it and writes the payout hash.
+model ReferralReward {
+  id         Int      @id @default(autoincrement())
+  vault      String
+  feeEventId String   @map("fee_event_id")
+  referrer   String
+  referee    String
+  shares     Decimal  @db.Decimal(40, 0)
+  status     String   @default("pending") // pending | paid
+  payoutTx   String?  @map("payout_tx")
+  ts         DateTime
+
+  @@unique([feeEventId, referee])
+  @@index([vault, referrer, status])
+  @@map("referral_reward")
 }

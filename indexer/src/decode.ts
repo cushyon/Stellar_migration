@@ -8,11 +8,12 @@ export interface DecodedEvent {
   type: string;
   topics: unknown[];
   data: unknown;
+  txHash: string;
 }
 
 /// Normalise a raw RPC event into a typed record. The first topic is the event
-/// name symbol (deposit / withdraw / transfer / approve / burn / strategy /
-/// paused / unpaused).
+/// name symbol (deposit / withdraw / transfer / approve / burn / fees /
+/// strategy / paused / unpaused).
 export function decodeEvent(ev: any): DecodedEvent {
   const rawTopics: unknown[] = ev.topic ?? ev.topics ?? [];
   const topics = rawTopics.map(toNative);
@@ -26,6 +27,7 @@ export function decodeEvent(ev: any): DecodedEvent {
     type,
     topics,
     data,
+    txHash: typeof ev.txHash === "string" ? ev.txHash : "",
   };
 }
 
@@ -65,6 +67,10 @@ export function shareDeltas(ev: DecodedEvent): ShareDelta[] {
     case "burn": {
       // topics [burn, from], data amount
       return [{ vault, address: String(t[1]), delta: -BigInt(d) }];
+    }
+    case "fees": {
+      // topics [fees, recipient], data [mgmt_fee, perf_fee, shares_minted]
+      return [{ vault, address: String(t[1]), delta: BigInt(d[2]) }];
     }
     default:
       return [];

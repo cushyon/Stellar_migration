@@ -67,6 +67,14 @@ export const config = {
     cushionAlertPct: Number(process.env.KEEPER_CUSHION_ALERT_PCT ?? "0.05"),
   },
 
+  // Referral: the referrer's share of the performance fee paid by a referee,
+  // in basis points of that fee. The binding comes from a message that the
+  // referee signs; the contract does not change.
+  // PARAM: risk parameter, set per deployment.
+  referral: {
+    referrerShareBps: Number(process.env.REFERRAL_REFERRER_SHARE_BPS ?? "2000"),
+  },
+
   // Where the alerts go. Without a channel they stay in the service log.
   alerts: {
     label: process.env.ALERT_LABEL ?? "cushion-testnet",

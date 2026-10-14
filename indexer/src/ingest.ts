@@ -3,6 +3,7 @@ import { server, latestLedger } from "./stellar.js";
 import { prisma, jsonSafe } from "./db.js";
 import { config } from "./config.js";
 import { decodeEvent, shareDeltas, type DecodedEvent } from "./decode.js";
+import { attributeDeposit, rewardFeeEvent } from "./referral.js";
 
 const LEDGERS_PER_DAY = 17280; // ~5s ledgers
 // Cold-start lookback. RPC getEvents retains ~7 days, but the queryable window
@@ -74,7 +75,7 @@ export async function ingestOnce(log?: {
 
     for (const raw of res.events) {
       const ev = decodeEvent(raw);
-      if (await persist(ev)) inserted++;
+      if (await persist(ev, log)) inserted++;
       scannedTo = Math.max(scannedTo, ev.ledger);
     }
     scannedTo = Math.max(scannedTo, res.latestLedger ?? scannedTo);
@@ -93,7 +94,10 @@ export async function ingestOnce(log?: {
   return inserted;
 }
 
-async function persist(ev: DecodedEvent): Promise<boolean> {
+async function persist(
+  ev: DecodedEvent,
+  log?: { info: (m: string) => void; error: (m: string) => void }
+): Promise<boolean> {
   try {
     await prisma.stellarEvent.create({
       data: {
@@ -110,6 +114,11 @@ async function persist(ev: DecodedEvent): Promise<boolean> {
     if (e?.code === "P2002") return false; // duplicate TOID - already ingested
     throw e;
   }
+
+  // Referral: a deposit may be the first one of a referred wallet, and a fee
+  // event pays the referrers. Both read the positions as they stand before it.
+  if (ev.type === "deposit") await attributeDeposit(ev, log);
+  if (ev.type === "fees") await rewardFeeEvent(ev, log);
 
   // Position deltas applied only for newly-inserted events → idempotent.
   for (const d of shareDeltas(ev)) {
