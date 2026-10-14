@@ -22,6 +22,7 @@ import { UserPositionChart } from "@/components/UserPositionChart";
 import type { VaultStats, UserPosition, VaultRisk, StrategyRun } from "@/services/indexer";
 import { AllocationBar } from "@/components/AllocationBar";
 import { StrategyActivity } from "@/components/StrategyActivity";
+import { ReferralCard } from "@/components/ReferralCard";
 import {
   invokeVault,
   StaleQuoteError,
@@ -75,6 +76,8 @@ function VaultPerformancePanel({
 }) {
   const symbol = config.asset.symbol;
   const decimals = config.asset.decimals;
+  const address = useStellarWalletStore((s) => s.address);
+  const [pendingRef, setPendingRef] = usePendingReferral();
   // Prefer return-since-inception (defined from day one) over the trailing
   // windows, which are null until the vault is old enough.
   // The last trade the vault actually accepted, not a promised cadence.
@@ -122,8 +125,51 @@ function VaultPerformancePanel({
       />
 
       <StrategyActivity runs={runs} risk={risk} symbol={symbol} safeSymbol={config.safeSymbol} decimals={decimals} />
+
+      <ReferralCard
+        vaultId={config.vaultId}
+        contractId={config.contractId}
+        address={address}
+        decimals={decimals}
+        pendingCode={pendingRef}
+        onClaimed={() => {
+          setPendingRef(null);
+          try {
+            window.localStorage.removeItem(REF_STORAGE_KEY);
+          } catch {
+            // a browser that refuses storage still works
+          }
+        }}
+      />
     </div>
   );
+}
+
+/** Where the referral code of the link waits until the wallet confirms it. */
+const REF_STORAGE_KEY = "cushion.referral.code";
+
+/**
+ * The referral code of the `?ref=` of the URL. It survives a reload and a
+ * wallet connection, because the visitor usually arrives before connecting.
+ */
+function usePendingReferral(): [string | null, (code: string | null) => void] {
+  const [code, setCode] = useState<string | null>(null);
+  useEffect(() => {
+    const valid = (value: string | null) =>
+      value && /^[A-Z2-9]{6}$/.test(value) ? value : null;
+    try {
+      const fromUrl = valid(new URLSearchParams(window.location.search).get("ref")?.toUpperCase() ?? null);
+      if (fromUrl) {
+        window.localStorage.setItem(REF_STORAGE_KEY, fromUrl);
+        setCode(fromUrl);
+        return;
+      }
+      setCode(valid(window.localStorage.getItem(REF_STORAGE_KEY)));
+    } catch {
+      setCode(null);
+    }
+  }, []);
+  return [code, setCode];
 }
 
 /** Time since the last trade the vault accepted, for the stats row. */

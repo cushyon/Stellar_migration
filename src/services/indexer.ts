@@ -180,3 +180,88 @@ export async function fetchStrategyRuns(
     return [];
   }
 }
+
+/* ── Referral ──────────────────────────────────────────────────────────────
+   The vault contract does not know about referrals. A referred wallet signs a
+   plain message that names the code, and the indexer keeps the binding with
+   its signature, so anyone can repeat the check. */
+
+export interface ReferralSummary {
+  address: string;
+  code: string | null;
+  referrerShareBps: number;
+  referred: { vault: string; referee: string; depositTx: string | null; claimedAt: string; ts: string | null }[];
+  rewards: {
+    pendingShares: string;
+    paidShares: string;
+    rows: {
+      id: number;
+      vault: string;
+      referee: string;
+      shares: string;
+      status: string;
+      payoutTx: string | null;
+      ts: string;
+    }[];
+  };
+  referredBy: { vault: string; referrer: string; code: string; depositTx: string | null } | null;
+}
+
+/** The referral code of a wallet. The indexer creates it on the first call. */
+export async function fetchReferralCode(address: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/referrals/code/${address}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return ((await res.json()) as { code: string }).code;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchReferralSummary(address: string): Promise<ReferralSummary | null> {
+  try {
+    const res = await fetch(`${BASE}/users/${address}/referrals`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as ReferralSummary;
+  } catch {
+    return null;
+  }
+}
+
+/** The message that the wallet must sign to claim a code. */
+export async function fetchReferralMessage(
+  vault: string,
+  address: string,
+  code: string
+): Promise<{ issuedAt: number; message: string } | null> {
+  try {
+    const url = `${BASE}/referrals/message?vault=${vault}&address=${address}&code=${code}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as { issuedAt: number; message: string };
+  } catch {
+    return null;
+  }
+}
+
+/** Send the signed claim. Returns the error text of the indexer when refused. */
+export async function postReferralClaim(input: {
+  vault: string;
+  address: string;
+  code: string;
+  issuedAt: number;
+  signature: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${BASE}/referrals/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const body = await res.json();
+    if (!res.ok) return { ok: false, error: String(body?.error ?? "the claim was refused") };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
