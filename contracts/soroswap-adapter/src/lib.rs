@@ -30,6 +30,8 @@ const ROUTER: Symbol = symbol_short!("ROUTER");
 /// Seconds added to the ledger time for the router deadline. The swap happens in
 /// this same transaction, so the value only has to be in the future.
 const DEADLINE_WINDOW: u64 = 60;
+/// Instance TTL threshold and target, in ledgers.
+const INSTANCE_TTL_LEDGERS: u32 = 100_000;
 
 /// The part of the Soroswap router that the adapter calls.
 #[allow(dead_code)]
@@ -58,11 +60,15 @@ pub struct SoroswapAdapter;
 
 #[contractimpl]
 impl SoroswapAdapter {
-    /// Set the Soroswap router. Confirm the id per network before a deployment:
-    /// it lives in `public/<network>.contracts.json` of soroswap/core.
-    pub fn set_router(e: Env, router: Address) {
+    /// Store the Soroswap router in the deployment transaction. The router cannot
+    /// change after this: a new router needs a new adapter. Confirm the id per
+    /// network before a deployment: it lives in
+    /// `public/<network>.contracts.json` of soroswap/core.
+    pub fn __constructor(e: Env, router: Address) {
         e.storage().instance().set(&ROUTER, &router);
-        e.storage().instance().extend_ttl(100_000, 100_000);
+        e.storage()
+            .instance()
+            .extend_ttl(INSTANCE_TTL_LEDGERS, INSTANCE_TTL_LEDGERS);
     }
 
     pub fn router(e: Env) -> Address {
@@ -72,6 +78,10 @@ impl SoroswapAdapter {
     /// The shape the vault expects (`Router` trait): the vault has already sent
     /// `amount_in` of `token_in` here, and it wants `token_out` back at `to`.
     pub fn swap(e: Env, token_in: Address, token_out: Address, amount_in: i128, to: Address) -> i128 {
+        // Each trade keeps the instance live, because no setter extends it now.
+        e.storage()
+            .instance()
+            .extend_ttl(INSTANCE_TTL_LEDGERS, INSTANCE_TTL_LEDGERS);
         let router: Address = e.storage().instance().get(&ROUTER).unwrap();
         let me = e.current_contract_address();
 
@@ -108,5 +118,32 @@ impl SoroswapAdapter {
         let amount_out = amounts.last().unwrap_or(0);
         token::Client::new(&e, &token_out).transfer(&me, &to, &amount_out);
         amount_out
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    #[test]
+    fn router_cannot_change_after_deployment() {
+        // No auth mock: the test does not sign for any address.
+        let e = Env::default();
+        let real_router = Address::generate(&e);
+        let fake_router = Address::generate(&e);
+        let adapter = e.register(SoroswapAdapter, SoroswapAdapterArgs::__constructor(&real_router));
+        let client = SoroswapAdapterClient::new(&e, &adapter);
+        assert_eq!(client.router(), real_router);
+
+        for name in ["set_router", "__constructor"] {
+            let result = e.try_invoke_contract::<(), soroban_sdk::Error>(
+                &adapter,
+                &Symbol::new(&e, name),
+                (fake_router.clone(),).into_val(&e),
+            );
+            assert!(result.is_err(), "{name} must not be callable");
+        }
+        assert_eq!(client.router(), real_router);
     }
 }
