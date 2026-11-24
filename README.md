@@ -49,7 +49,7 @@ contracts/
       storage.rs              → Storage keys, StrategyConfig, TTL helpers
       errors.rs               → Error enum
       floor.rs                → Value floor: epoch, ratchet, stop rule
-      test.rs                 → 73 tests
+      test.rs                 → 76 tests
     Cargo.toml                → Soroban SDK 26.1.0 + OZ Pausable
   test-router/                → Testnet-only adapter for the safeguard checks (not a DEX)
   test-oracle/                → Testnet-only mock SEP-40 feed for the safeguard checks
@@ -113,9 +113,15 @@ The contract implements two Stellar standards:
 cd contracts/strategy-vault && stellar contract build
 # Coverage
 cargo llvm-cov --summary-only
-# Deploy to testnet
+# Deploy the vault to testnet. The constructor sets the roles and the config.
 stellar contract deploy --wasm ../../target/wasm32v1-none/release/strategy_vault.wasm \
-  --source <identity> --network testnet
+  --source <identity> --network testnet \
+  -- --admin <address> --asset <token> --operator <address> \
+  --name <name> --symbol <symbol> --decimals <share decimals> --config '<StrategyConfig JSON>'
+# Deploy the Soroswap adapter. The router cannot change after deployment.
+stellar contract deploy --wasm ../../target/wasm32v1-none/release/soroswap_adapter.wasm \
+  --source <identity> --network testnet \
+  -- --router <soroswap router id>
 ```
 
 ## How to run the frontend
