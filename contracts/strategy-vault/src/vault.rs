@@ -1,4 +1,4 @@
-use soroban_sdk::{panic_with_error, token, Address, Env};
+use soroban_sdk::{panic_with_error, token, Address, Env, Vec};
 
 use crate::errors::VaultError;
 use crate::oracle::{self, PRICE_SCALE};
@@ -124,6 +124,45 @@ pub fn burn_shares(e: &Env, from: &Address, amount: i128) -> Result<(), VaultErr
     let total = storage::get_total_shares(e);
     storage::set_total_shares(e, total - amount);
     Ok(())
+}
+
+/// Burn `shares` and pay `receiver` their part of each token that the vault
+/// holds. Each amount rounds down, so the remaining holders keep the dust. This
+/// needs no swap and no base liquidity.
+pub fn pay_in_kind(
+    e: &Env,
+    owner: &Address,
+    shares: i128,
+    receiver: &Address,
+) -> Result<Vec<(Address, i128)>, VaultError> {
+    let contract = e.current_contract_address();
+    let supply = storage::get_total_shares(e) + supply_offset(e);
+
+    let mut tokens = Vec::from_array(e, [storage::get_asset(e)]);
+    for token_addr in storage::get_config(e).allowed_tokens.iter() {
+        if !tokens.contains(&token_addr) {
+            tokens.push_back(token_addr);
+        }
+    }
+
+    let mut payout: Vec<(Address, i128)> = Vec::new(e);
+    for token_addr in tokens.iter() {
+        let balance = token::Client::new(e, &token_addr).balance(&contract);
+        let amount = balance.checked_mul(shares).ok_or(VaultError::MathOverflow)? / supply;
+        if amount > 0 {
+            payout.push_back((token_addr, amount));
+        }
+    }
+    // Refuse a burn that pays nothing.
+    if payout.is_empty() {
+        return Err(VaultError::InvalidRedeemAmount);
+    }
+
+    burn_shares(e, owner, shares)?;
+    for (token_addr, amount) in payout.iter() {
+        token::Client::new(e, &token_addr).transfer(&contract, receiver, &amount);
+    }
+    Ok(payout)
 }
 
 pub fn transfer_asset_in(e: &Env, from: &Address, amount: i128) {

@@ -37,10 +37,13 @@ pub enum VaultError {
     /// independent of the operator-supplied `min_amount_out`).
     SlippageCapExceeded = 43,
     /// The share value is at or under the floor: the strategy has stopped, and
-    /// no trade may add risk. Trades into the safe asset stay allowed.
+    /// no trade may add risk. Trades into the safe asset stay allowed. Deposits
+    /// are closed.
     StrategyStopped = 44,
     /// No epoch has been started, so there is no floor to check against.
     EpochNotStarted = 45,
     /// An epoch is live and above its floor; it cannot be restarted.
     EpochActive = 46,
+    /// `redeem_in_kind` opens only after the stop rule. Before it, use `redeem`.
+    StrategyNotStopped = 47,
 }

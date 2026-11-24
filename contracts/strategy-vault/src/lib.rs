@@ -44,6 +44,18 @@ fn require_guardian_or_admin(e: &Env, caller: &Address) -> Result<(), VaultError
     }
 }
 
+/// Collect the pending fees, then refuse a deposit during the stop. The fee step
+/// runs first: a later `collect_fees` in the same transaction then has nothing
+/// to charge, so it cannot move the share value under the floor and open
+/// `redeem_in_kind` to the depositor.
+fn prepare_deposit(e: &Env, nav: i128) -> Result<(), VaultError> {
+    fees::collect_at(e, nav)?;
+    if floor::is_stopped_at(e, nav)? {
+        return Err(VaultError::StrategyStopped);
+    }
+    Ok(())
+}
+
 // ===========================================================================
 // Public interface
 // ===========================================================================
@@ -346,6 +358,7 @@ impl StrategyVaultContract {
         }
 
         let ta = vault::total_assets(&e);
+        prepare_deposit(&e, ta)?;
         let ts = storage::get_total_shares(&e);
         let shares = vault::assets_to_shares(&e, ta, ts, assets);
 
@@ -415,6 +428,37 @@ impl StrategyVaultContract {
         Ok(assets)
     }
 
+    /// Exit after the stop rule. The vault then holds mostly the safe asset, so
+    /// `withdraw` and `redeem` cannot pay in the base asset. This pays `receiver`
+    /// the part of each token that `shares` own, and returns the amounts. It
+    /// stays open during a pause. Deposits are closed during the stop, so nobody
+    /// can deposit and exit at once at a stale oracle price.
+    pub fn redeem_in_kind(
+        e: Env,
+        owner: Address,
+        shares: i128,
+        receiver: Address,
+    ) -> Result<Vec<(Address, i128)>, VaultError> {
+        storage::bump_instance(&e);
+        owner.require_auth();
+
+        if shares <= 0 {
+            return Err(VaultError::InvalidRedeemAmount);
+        }
+
+        let ta = vault::total_assets(&e);
+        if !floor::is_stopped_at(&e, ta)? {
+            return Err(VaultError::StrategyNotStopped);
+        }
+
+        let ts = storage::get_total_shares(&e);
+        let value = vault::shares_to_assets(&e, ta, ts, shares);
+        let payout = vault::pay_in_kind(&e, &owner, shares, &receiver)?;
+
+        events::withdraw(&e, &owner, &receiver, value, shares);
+        Ok(payout)
+    }
+
     /// Mint exactly `shares` to `receiver`, pulling the required assets from `from`.
     pub fn mint(
         e: Env,
@@ -431,6 +475,7 @@ impl StrategyVaultContract {
         }
 
         let ta = vault::total_assets(&e);
+        prepare_deposit(&e, ta)?;
         let ts = storage::get_total_shares(&e);
         let assets_needed = vault::shares_to_assets_round_up(&e, ta, ts, shares);
 
@@ -492,8 +537,8 @@ impl StrategyVaultContract {
     // Emergency pause (OZ Pausable) + guardian role
     // -----------------------------------------------------------------------
 
-    /// Guardian (or admin) halts deposits/mints/strategy. Withdraw & redeem
-    /// stay callable - the User Exit Guarantee survives a pause.
+    /// Guardian (or admin) halts deposits/mints/strategy. Withdraw, redeem, and
+    /// redeem_in_kind stay callable - the User Exit Guarantee survives a pause.
     pub fn pause(e: Env, caller: Address) -> Result<(), VaultError> {
         storage::bump_instance(&e);
         caller.require_auth();
@@ -585,7 +630,8 @@ impl StrategyVaultContract {
     }
 
     /// True once the share value is at or under the floor. From then on the
-    /// strategy may only move into the safe asset.
+    /// strategy may only move into the safe asset, deposits are closed, and
+    /// `redeem_in_kind` is open.
     pub fn strategy_stopped(e: Env) -> Result<bool, VaultError> {
         storage::bump_instance(&e);
         floor::is_stopped(&e)

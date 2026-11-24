@@ -38,8 +38,13 @@ pub fn baseline_share_price(decimals_offset: u32) -> i128 {
 /// Accrue management + performance fees and mint the corresponding shares to the
 /// fee recipient. Returns `(mgmt_fee, perf_fee)` in base-asset units.
 pub fn collect(e: &Env) -> Result<(i128, i128), VaultError> {
+    collect_at(e, vault::total_assets(e))
+}
+
+/// `collect` for a NAV that the caller has already read. A fee mints shares and
+/// moves no token, so `nav` stays correct after this call.
+pub fn collect_at(e: &Env, nav: i128) -> Result<(i128, i128), VaultError> {
     let cfg = storage::get_config(e);
-    let nav = vault::total_assets(e);
     let supply = storage::get_total_shares(e);
     let now = e.ledger().timestamp();
 

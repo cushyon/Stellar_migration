@@ -13,7 +13,8 @@
 //!   allowed, so the vault can protect itself even after a gap under the floor.
 //!
 //! Once the share value is at or under the floor, the strategy has stopped: no
-//! trade may add risk again. Withdrawals are never touched by this module.
+//! trade may add risk again. Deposits close, and `redeem_in_kind` opens.
+//! `withdraw` and `redeem` are never touched by this module.
 //!
 //! Values are scaled by `PRICE_SCALE`. The safe asset is assumed to share the
 //! base decimals (XLM and USDC both use 7). PARAM: `floor_bps` and `lockin_bps`
@@ -133,6 +134,15 @@ pub fn is_stopped(e: &Env) -> Result<bool, VaultError> {
         return Ok(false);
     }
     Ok(share_value_in_safe(e)? <= st.floor)
+}
+
+/// `is_stopped` for a NAV that the caller has already read.
+pub fn is_stopped_at(e: &Env, nav_base: i128) -> Result<bool, VaultError> {
+    let st = get_epoch(e);
+    if !st.active {
+        return Ok(false);
+    }
+    Ok(share_value_from_nav(e, nav_base)? <= st.floor)
 }
 
 /// Gate for one strategy trade, evaluated after the swap.

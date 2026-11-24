@@ -27,7 +27,10 @@ pub struct Deposit {
 }
 
 /// `withdraw` - topics `[withdraw, owner, receiver]`, data `[assets, shares]`.
-/// Emitted by both `withdraw` (assets-specified) and `redeem` (shares-specified).
+/// Emitted by `withdraw` (assets-specified), `redeem` (shares-specified), and
+/// `redeem_in_kind`. For `redeem_in_kind`, `assets` is the value of the burned
+/// shares in base units at the oracle price, so the indexer cost basis stays
+/// correct.
 #[contractevent(data_format = "vec")]
 pub struct Withdraw {
     #[topic]

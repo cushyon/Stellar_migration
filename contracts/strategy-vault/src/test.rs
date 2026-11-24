@@ -1137,6 +1137,247 @@ fn test_start_epoch_allowed_after_a_stop() {
     assert!(!vault.strategy_stopped());
 }
 
+// ---------------------------------------------------------------------------
+// Exit after the stop rule: `redeem_in_kind`, closed deposits, fees first.
+// ---------------------------------------------------------------------------
+
+/// The holder deposits 1000 base, and the vault holds 800 base and 100 safe. A
+/// crash to 5.0 base per safe token puts the value (260 safe) under the floor (300).
+fn stopped_vault<'a>(e: &'a Env, f: &StratFix) -> StrategyVaultContractClient<'a> {
+    let vault = StrategyVaultContractClient::new(e, &f.vault);
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    MockRouterClient::new(e, &f.router).set_out(&100_0000000i128);
+    vault.execute_strategy(
+        &f.op, &f.router, &f.base, &f.risky, &200_0000000i128, &100_0000000i128, &0u64, &200_000u64, &Vec::new(e),
+    );
+    MockReflectorClient::new(e, &f.oracle).set(
+        &symbol_short!("RSK"),
+        &(5 * PRICE_SCALE),
+        &(5 * PRICE_SCALE),
+        &100_000u64,
+    );
+    assert!(vault.strategy_stopped());
+    vault
+}
+
+/// Turn on a management fee of 1% a year, paid to a new recipient.
+fn enable_management_fee(e: &Env, vault: &StrategyVaultContractClient) -> Address {
+    let recipient = Address::generate(e);
+    vault.set_fee_recipient(&recipient);
+    let mut cfg = vault.get_config();
+    cfg.mgmt_fee_bps = 100;
+    vault.set_config(&cfg);
+    recipient
+}
+
+/// Move the ledger to `at`, and publish fresh prices at that time.
+fn advance_with_prices(e: &Env, f: &StratFix, at: u64, safe_price: i128) {
+    e.ledger().set_timestamp(at);
+    let oracle = MockReflectorClient::new(e, &f.oracle);
+    oracle.set(&symbol_short!("XLM"), &PRICE_SCALE, &PRICE_SCALE, &at);
+    oracle.set(&symbol_short!("RSK"), &safe_price, &safe_price, &at);
+}
+
+#[test]
+fn test_redeem_in_kind_pays_each_token_after_the_stop() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    let receiver = Address::generate(&e);
+
+    let shares = vault.balance(&f.user);
+    let half = shares / 2;
+    // The virtual offset stays in the divisor, so each amount rounds down.
+    let supply = shares + 10_i128.pow(TEST_DECIMALS_OFFSET);
+    let base_out = 800_0000000i128 * half / supply;
+    let safe_out = 100_0000000i128 * half / supply;
+
+    let payout = vault.redeem_in_kind(&f.user, &half, &receiver);
+
+    assert_eq!(payout, vec![&e, (f.base.clone(), base_out), (f.risky.clone(), safe_out)]);
+    assert_eq!(token::Client::new(&e, &f.base).balance(&receiver), base_out);
+    assert_eq!(token::Client::new(&e, &f.risky).balance(&receiver), safe_out);
+    assert_eq!(vault.balance(&f.user), shares - half);
+    assert_eq!(vault.total_supply(), shares - half);
+}
+
+#[test]
+fn test_redeem_in_kind_reports_the_share_value_in_the_withdraw_event() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+
+    let shares = vault.balance(&f.user) / 2;
+    let value = vault.preview_redeem(&shares);
+    vault.redeem_in_kind(&f.user, &shares, &f.user);
+
+    let vault_events = e.events().all().filter_by_contract(&f.vault);
+    assert_eq!(
+        vault_events,
+        std::vec![events::Withdraw {
+            owner: f.user.clone(),
+            receiver: f.user.clone(),
+            assets: value,
+            shares,
+        }
+        .to_xdr(&e, &f.vault)],
+    );
+}
+
+#[test]
+fn test_redeem_in_kind_leaves_the_other_holder_whole() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let other = Address::generate(&e);
+    token::StellarAssetClient::new(&e, &f.base).mint(&other, &1_000_0000000i128);
+    StrategyVaultContractClient::new(&e, &f.vault).deposit(&other, &1_000_0000000i128, &other);
+    let vault = stopped_vault(&e, &f);
+    let base = token::Client::new(&e, &f.base);
+    let safe = token::Client::new(&e, &f.risky);
+    let receiver = Address::generate(&e);
+    let value_before = vault.share_value_safe();
+
+    vault.redeem_in_kind(&f.user, &vault.balance(&f.user), &receiver);
+    assert!(vault.share_value_safe() >= value_before, "an exit never lowers the value of the others");
+
+    let other_receiver = Address::generate(&e);
+    vault.redeem_in_kind(&other, &vault.balance(&other), &other_receiver);
+    assert!(base.balance(&other_receiver) >= base.balance(&receiver));
+    assert!(safe.balance(&other_receiver) >= safe.balance(&receiver));
+    assert_eq!(vault.total_supply(), 0);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #47)")] // StrategyNotStopped
+fn test_redeem_in_kind_refused_before_the_stop() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    vault.redeem_in_kind(&f.user, &1_0000000i128, &f.user);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #47)")] // StrategyNotStopped
+fn test_redeem_in_kind_refused_without_an_epoch() {
+    let e = Env::default();
+    let f = setup_strategy_with(&e, false);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+    vault.redeem_in_kind(&f.user, &1_0000000i128, &f.user);
+}
+
+#[test]
+fn test_redeem_in_kind_stays_open_during_a_pause() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    vault.pause(&vault.get_admin());
+
+    vault.redeem_in_kind(&f.user, &vault.balance(&f.user), &f.user);
+    assert_eq!(vault.balance(&f.user), 0);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #14)")] // InvalidRedeemAmount
+fn test_redeem_in_kind_refuses_zero_shares() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    vault.redeem_in_kind(&f.user, &0i128, &f.user);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #14)")] // InvalidRedeemAmount
+fn test_redeem_in_kind_refuses_shares_too_small_to_pay() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    vault.redeem_in_kind(&f.user, &1i128, &f.user);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #12)")] // InsufficientShares
+fn test_redeem_in_kind_refuses_more_than_the_balance() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    vault.redeem_in_kind(&f.user, &(vault.balance(&f.user) + 1), &f.user);
+}
+
+#[test]
+#[should_panic(expected = "Error(Auth, InvalidAction)")]
+fn test_redeem_in_kind_needs_the_owner_signature() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    let shares = vault.balance(&f.user);
+    let thief = Address::generate(&e);
+    e.set_auths(&[]);
+    vault.redeem_in_kind(&f.user, &shares, &thief);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #44)")] // StrategyStopped
+fn test_deposit_refused_during_the_stop() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    vault.deposit(&f.user, &1_0000000i128, &f.user);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #44)")] // StrategyStopped
+fn test_mint_refused_during_the_stop() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    vault.mint(&f.user, &1_0000000i128, &f.user);
+}
+
+#[test]
+fn test_deposit_reopens_after_a_new_epoch() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = stopped_vault(&e, &f);
+    vault.start_epoch();
+    assert!(!vault.strategy_stopped());
+    assert!(vault.deposit(&f.user, &1_0000000i128, &f.user) > 0);
+}
+
+#[test]
+fn test_deposit_collects_the_pending_fees_first() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    let recipient = enable_management_fee(&e, &vault);
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+
+    advance_with_prices(&e, &f, 100_000 + 31_536_000, 2 * PRICE_SCALE);
+    vault.deposit(&f.user, &1_0000000i128, &f.user);
+
+    assert!(vault.balance(&recipient) > 0, "the deposit minted the fee shares");
+    // The fee clock restarted, so this ledger has nothing more to charge.
+    assert_eq!(vault.collect_fees(), (0, 0));
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #44)")] // StrategyStopped
+fn test_deposit_refused_when_the_pending_fee_reaches_the_floor() {
+    let e = Env::default();
+    let f = setup_strategy(&e);
+    let vault = StrategyVaultContractClient::new(&e, &f.vault);
+    enable_management_fee(&e, &vault);
+    vault.deposit(&f.user, &1_000_0000000i128, &f.user);
+
+    // 1000 base at 3.33 base per safe token: 300.3 safe, just over the floor of 300.
+    advance_with_prices(&e, &f, 100_000 + 31_536_000, PRICE_SCALE * 333 / 100);
+    assert!(!vault.strategy_stopped());
+
+    // One year of fees (1%) takes the value to about 297.3, under the floor.
+    vault.deposit(&f.user, &1_0000000i128, &f.user);
+}
+
 #[test]
 #[should_panic(expected = "Error(Contract, #46)")] // EpochActive
 fn test_config_refuses_a_new_safe_asset_while_the_epoch_is_live() {
