@@ -130,7 +130,7 @@ function VaultPerformancePanel({
         vaultId={config.vaultId}
         contractId={config.contractId}
         address={address}
-        decimals={decimals}
+        shareDecimals={config.shareDecimals}
         pendingCode={pendingRef}
         onClaimed={() => {
           setPendingRef(null);
@@ -235,7 +235,7 @@ function UserPerformancePanel({
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">Shares</span>
-            <span>{formatQty(Number(shares) / 10 ** decimals)}</span>
+            <span>{formatQty(Number(shares) / 10 ** config.shareDecimals)}</span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-gray-400">P&L %</span>

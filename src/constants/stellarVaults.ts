@@ -14,6 +14,8 @@ export type StellarVaultConfig = {
   /** Protected share of the value at the start of an epoch, in basis points. */
   floorBps: number;
   asset: StellarAssetConfig;
+  /** Decimals of the share token (`decimals()` of the vault): asset decimals + `decimals_offset`. */
+  shareDecimals: number;
   /** Symbol of the safe leg the floor is measured in. */
   safeSymbol: string;
   /** Icon of the safe leg. */
@@ -23,9 +25,9 @@ export type StellarVaultConfig = {
 const STELLAR_VAULT_1: StellarVaultConfig = {
   name: "XLM Capital Protected",
   vaultId: "cushion",
-  // Testnet deployment with the value floor (2026-09-29): XLM base and risky
+  // Testnet deployment with the STRIDE fixes (2026-11-24): XLM base and risky
   // leg, Soroswap testnet USDC as the safe leg, Reflector oracle, Soroswap adapter.
-  contractId: "CCY7NP6KLDWLPC2IKJYSKSXJPHAZWZPNHONBYVLYKRSHKN5KMPPVWVP6",
+  contractId: "CAT5JPUQQAM6QBAHVTJX642S5UN3DFS5BGF3INQCNIU4OBEW4Y33FRTP",
   description:
     "60% capital guarantee and profit lock-in",
   floorBps: 6000,
@@ -36,6 +38,7 @@ const STELLAR_VAULT_1: StellarVaultConfig = {
     decimals: 7,
     icon: "/icons/xlm.svg",
   },
+  shareDecimals: 10,
 };
 
 export const STELLAR_VAULTS: StellarVaultConfig[] = [STELLAR_VAULT_1];

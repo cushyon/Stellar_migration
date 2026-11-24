@@ -22,7 +22,7 @@ export function ReferralCard({
   vaultId,
   contractId,
   address,
-  decimals,
+  shareDecimals,
   pendingCode,
   onClaimed,
 }: {
@@ -31,7 +31,8 @@ export function ReferralCard({
   /** Onchain id of the vault, named in the message that the referee signs. */
   contractId: string;
   address: string | null;
-  decimals: number;
+  /** Decimals of the share token. The rewards are vault shares. */
+  shareDecimals: number;
   /** Code read from the `?ref=` of the URL, waiting for a signature. */
   pendingCode: string | null;
   onClaimed: () => void;
@@ -178,13 +179,13 @@ export function ReferralCard({
         <div className="flex flex-col gap-1">
           <span className="text-gray-400">Pending rewards</span>
           <span className="font-semibold text-white">
-            {formatQty(Number(pending) / 10 ** decimals)} shares
+            {formatQty(Number(pending) / 10 ** shareDecimals)} shares
           </span>
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-gray-400">Paid</span>
           <span className="font-semibold text-white">
-            {formatQty(Number(paid) / 10 ** decimals)} shares
+            {formatQty(Number(paid) / 10 ** shareDecimals)} shares
           </span>
         </div>
       </div>
@@ -206,7 +207,7 @@ export function ReferralCard({
                     {row.referee.slice(0, 4)}...{row.referee.slice(-4)}
                   </td>
                   <td className="py-2 pr-4">
-                    {formatQty(Number(row.shares) / 10 ** decimals)} shares
+                    {formatQty(Number(row.shares) / 10 ** shareDecimals)} shares
                   </td>
                   <td className="py-2 text-gray-400">
                     {row.status === "paid" && row.payoutTx ? (
