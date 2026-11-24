@@ -49,7 +49,7 @@ contracts/
       storage.rs              → Storage keys, StrategyConfig, TTL helpers
       errors.rs               → Error enum
       floor.rs                → Value floor: epoch, ratchet, stop rule
-      test.rs                 → 76 tests
+      test.rs                 → 91 tests
     Cargo.toml                → Soroban SDK 26.1.0 + OZ Pausable
   test-router/                → Testnet-only adapter for the safeguard checks (not a DEX)
   test-oracle/                → Testnet-only mock SEP-40 feed for the safeguard checks
@@ -77,15 +77,15 @@ The contract implements two Stellar standards:
 
 **Oracle (Reflector, SEP-40)** - `get_safe_price` computes the USD cross-rate from `lastprice` and **reverts** on a stale quote, an unavailable quote, or a deviation beyond `deviation_bps` between `lastprice` and the mean of recent `prices()` records (a deviating oracle can therefore never produce a trade). The vault never accepts an executor-supplied price. Reflector is the primary source in Tranche 1; a DEX-TWAP primary layer (Soroswap/Phoenix pools) lands with the DEX adapters in Tranche 2, demoting the external feed to a sanity check per the target architecture.
 
-**Value floor** - the protection the product promises, enforced onchain. The vault measures the value of one share in the **safe asset** (`safe_asset`; for the product, USDC, while the base asset XLM is the risky leg). An admin starts an epoch with `start_epoch`; the floor is `floor_bps` of the share value at that moment, and it **ratchets**: each new high that clears one more `lockin_bps` step raises the floor by that step, and it never comes down. After a swap, a trade that **adds risk** (its `token_out` is not the safe asset) must leave the share value at or above the floor, and it is refused outright once the value is at or under the floor: **the strategy has stopped**. A trade into the safe asset is always allowed, so the vault can protect itself even after a gap. Withdrawals are never touched. `get_epoch`, `share_value_safe`, and `strategy_stopped` expose the state.
+**Value floor** - the protection the product promises, enforced onchain. The vault measures the value of one share in the **safe asset** (`safe_asset`; for the product, USDC, while the base asset XLM is the risky leg). An admin starts an epoch with `start_epoch`; the floor is `floor_bps` of the share value at that moment, and it **ratchets**: each new high that clears one more `lockin_bps` step raises the floor by that step, and it never comes down. After a swap, a trade that **adds risk** (its `token_out` is not the safe asset) must leave the share value at or above the floor, and it is refused outright once the value is at or under the floor: **the strategy has stopped**. A trade into the safe asset is always allowed, so the vault can protect itself even after a gap. During the stop, `deposit` and `mint` are refused, and `redeem_in_kind` opens. `withdraw` and `redeem` are never touched. `get_epoch`, `share_value_safe`, and `strategy_stopped` expose the state.
 
-**Emergency pause (OZ Pausable)** - a guardian (or admin) can `pause`/`unpause`. Pause halts `deposit`/`mint`/`execute_strategy`; `withdraw`/`redeem` stay callable.
+**Emergency pause (OZ Pausable)** - a guardian (or admin) can `pause`/`unpause`. Pause halts `deposit`/`mint`/`execute_strategy`; `withdraw`/`redeem`/`redeem_in_kind` stay callable.
 
-**User Exit Guarantee** - `withdraw`/`redeem` read real onchain balances. When the vault holds only base (the keeper-maintained buffer), they always succeed regardless of strategy or oracle state.
+**User Exit Guarantee** - `withdraw`/`redeem` read real onchain balances and pay in the base asset. When the vault holds only base (the keeper-maintained buffer), they always succeed regardless of strategy or oracle state. When the vault holds mostly the safe asset, a large withdrawal can fail for lack of base. After the stop rule, `redeem_in_kind` pays each holder their part of every held token, with no swap, and it stays open during a pause. It needs a working oracle to detect the stop.
 
 **Virtual offset** - `decimals_offset` (config) hardens against share inflation / rounding attacks on empty vaults.
 
-**Fees** - management (`mgmt_fee_bps`, per year) and performance (`perf_fee_bps`, on profit above a **high-water mark**) fees accrue via permissionless `collect_fees()`, paid by minting shares to the fee recipient (dilution). Both default to 0 until parameters are set per deployment.
+**Fees** - management (`mgmt_fee_bps`, per year) and performance (`perf_fee_bps`, on profit above a **high-water mark**) fees accrue via permissionless `collect_fees()` and at the start of each `deposit`/`mint`, paid by minting shares to the fee recipient (dilution). Both default to 0 until parameters are set per deployment.
 
 ### Event schema (frozen - the indexer is built against it)
 
@@ -101,6 +101,8 @@ The contract implements two Stellar standards:
 | `paused` / `unpaused` | per OZ Pausable | - |
 
 > Note: there is intentionally **no** `circuit_broken` event - the oracle halt is a revert, and Soroban rolls back events on revert, so the durable signal is the `OracleDeviation`/`OracleStale` error on the failed transaction.
+
+> Note: `redeem_in_kind` emits `withdraw`. Its `assets` field is the value of the burned shares in base units at the oracle price, because the payout holds several tokens.
 
 ### Config (`StrategyConfig`)
 
