@@ -7,11 +7,11 @@ extern crate std;
 
 use crate::oracle::{Asset, PriceData};
 use crate::storage::StrategyConfig;
-use crate::{events, StrategyVaultContract, StrategyVaultContractClient};
+use crate::{events, StrategyVaultContract, StrategyVaultContractArgs, StrategyVaultContractClient};
 use soroban_sdk::{
     contract, contractimpl, symbol_short, vec,
     testutils::{Address as _, Events as _, Ledger as _},
-    token, Address, Env, Event, Map, String, Symbol, Vec,
+    token, Address, Env, Event, IntoVal, Map, String, Symbol, Vec,
 };
 use stellar_contract_utils::pausable;
 
@@ -136,9 +136,6 @@ fn setup_strategy_with(e: &Env, start_epoch: bool) -> StratFix {
     let oracle = e.register(MockReflector, ());
     let router = e.register(MockRouter, ());
 
-    let vault_addr = e.register(StrategyVaultContract, ());
-    let vault = StrategyVaultContractClient::new(e, &vault_addr);
-
     let mut allowed = Vec::new(e);
     allowed.push_back(base.clone());
     allowed.push_back(risky.clone());
@@ -150,15 +147,19 @@ fn setup_strategy_with(e: &Env, start_epoch: bool) -> StratFix {
     // measured in it.
     let mut config = make_config(1_000_000_0000000, 60, allowed, oracle.clone(), syms, risky.clone());
     config.allowed_routers.push_back(router.clone());
-    vault.initialize(
-        &admin,
-        &base,
-        &op,
-        &String::from_str(e, "Vault Share"),
-        &String::from_str(e, "vSHARE"),
-        &7u32,
-        &config,
+    let vault_addr = e.register(
+        StrategyVaultContract,
+        StrategyVaultContractArgs::__constructor(
+            &admin,
+            &base,
+            &op,
+            &String::from_str(e, "Vault Share"),
+            &String::from_str(e, "vSHARE"),
+            &7u32,
+            &config,
+        ),
     );
+    let vault = StrategyVaultContractClient::new(e, &vault_addr);
 
     // Fund the user, and pre-fund the router with both tokens so swaps can pay out.
     base_sac.mint(&user, &100_000_0000000);
@@ -206,23 +207,24 @@ macro_rules! setup {
         #[allow(unused_variables)]
         let $tc = token::Client::new(&$e, &$token_addr);
 
-        #[allow(unused_variables)]
-        let $vault_addr: Address = $e.register(StrategyVaultContract, ());
-        let $vault = StrategyVaultContractClient::new(&$e, &$vault_addr);
-
         let mut allowed = Vec::new(&$e);
         allowed.push_back($token_addr.clone());
         let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&$e), Map::new(&$e), $token_addr.clone());
 
-        $vault.initialize(
-            &$admin,
-            &$token_addr,
-            &$op,
-            &String::from_str(&$e, "Vault Share"),
-            &String::from_str(&$e, "vSHARE"),
-            &7u32,
-            &config,
+        #[allow(unused_variables)]
+        let $vault_addr: Address = $e.register(
+            StrategyVaultContract,
+            StrategyVaultContractArgs::__constructor(
+                &$admin,
+                &$token_addr,
+                &$op,
+                &String::from_str(&$e, "Vault Share"),
+                &String::from_str(&$e, "vSHARE"),
+                &7u32,
+                &config,
+            ),
         );
+        let $vault = StrategyVaultContractClient::new(&$e, &$vault_addr);
 
         // Fund user with 10,000 tokens (7 decimals)
         $sac.mint(&$user, &10_000_0000000);
@@ -289,22 +291,23 @@ fn test_initialization() {
     let admin = Address::generate(&e);
     let operator = Address::generate(&e);
     let token_addr = e.register_stellar_asset_contract_v2(admin.clone()).address();
-    let vault_addr: Address = e.register(StrategyVaultContract, ());
-    let vault = StrategyVaultContractClient::new(&e, &vault_addr);
-
     let mut allowed = Vec::new(&e);
     allowed.push_back(token_addr.clone());
     let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&e), Map::new(&e), token_addr.clone());
 
-    vault.initialize(
-        &admin,
-        &token_addr,
-        &operator,
-        &String::from_str(&e, "Vault Share"),
-        &String::from_str(&e, "vSHARE"),
-        &7u32,
-        &config,
+    let vault_addr: Address = e.register(
+        StrategyVaultContract,
+        StrategyVaultContractArgs::__constructor(
+            &admin,
+            &token_addr,
+            &operator,
+            &String::from_str(&e, "Vault Share"),
+            &String::from_str(&e, "vSHARE"),
+            &7u32,
+            &config,
+        ),
     );
+    let vault = StrategyVaultContractClient::new(&e, &vault_addr);
 
     assert_eq!(vault.name(), String::from_str(&e, "Vault Share"));
     assert_eq!(vault.symbol(), String::from_str(&e, "vSHARE"));
@@ -316,32 +319,46 @@ fn test_initialization() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #31)")]
-fn test_double_initialization_fails() {
+fn test_deployed_vault_cannot_be_initialized_again() {
     let e = Env::default();
     e.mock_all_auths();
     let admin = Address::generate(&e);
-    let operator = Address::generate(&e);
+    let attacker = Address::generate(&e);
     let token_addr = e.register_stellar_asset_contract_v2(admin.clone()).address();
-    let vault_addr: Address = e.register(StrategyVaultContract, ());
-    let vault = StrategyVaultContractClient::new(&e, &vault_addr);
 
     let mut allowed = Vec::new(&e);
     allowed.push_back(token_addr.clone());
     let config = make_config(1_000_000_0000000, 60, allowed, Address::generate(&e), Map::new(&e), token_addr.clone());
+    let name = String::from_str(&e, "VS");
 
-    vault.initialize(
-        &admin, &token_addr, &operator,
-        &String::from_str(&e, "VS"), &String::from_str(&e, "VS"),
-        &7u32, &config,
+    let vault_addr: Address = e.register(
+        StrategyVaultContract,
+        StrategyVaultContractArgs::__constructor(
+            &admin, &token_addr, &admin, &name, &name, &7u32, &config,
+        ),
     );
+    let vault = StrategyVaultContractClient::new(&e, &vault_addr);
 
-    // Second call must fail with AlreadyInitialized (31)
-    vault.initialize(
-        &admin, &token_addr, &operator,
-        &String::from_str(&e, "VS"), &String::from_str(&e, "VS"),
-        &7u32, &config,
-    );
+    for func in ["initialize", "__constructor"] {
+        let args: Vec<soroban_sdk::Val> = (
+            attacker.clone(),
+            token_addr.clone(),
+            attacker.clone(),
+            name.clone(),
+            name.clone(),
+            7u32,
+            config.clone(),
+        )
+            .into_val(&e);
+        let result = e.try_invoke_contract::<(), soroban_sdk::Error>(
+            &vault_addr,
+            &Symbol::new(&e, func),
+            args,
+        );
+        assert!(result.is_err(), "{func} must not be callable");
+    }
+    assert_eq!(vault.get_admin(), admin);
+    assert_eq!(vault.get_operator(), admin);
 }
 
 // ===========================================================================
@@ -1576,6 +1593,48 @@ fn test_pause_emits_event() {
         vault_events,
         std::vec![pausable::Paused {}.to_xdr(&e, &vault_addr)],
     );
+}
+
+// ===========================================================================
+// Negative share amounts
+// ===========================================================================
+
+#[test]
+fn test_transfer_from_refuses_a_negative_amount() {
+    setup!(e, token_addr, sac, tc, vault_addr, vault, admin, op, victim);
+    let attacker = Address::generate(&e);
+    let shares = vault.deposit(&victim, &1_000_0000000i128, &victim);
+
+    let result = vault.try_transfer_from(&attacker, &attacker, &victim, &(-shares));
+
+    assert_eq!(result, Err(Ok(crate::errors::VaultError::InvalidDepositAmount)));
+    assert_eq!(vault.balance(&victim), shares);
+    assert_eq!(vault.balance(&attacker), 0);
+}
+
+#[test]
+fn test_burn_from_refuses_a_negative_amount() {
+    setup!(e, token_addr, sac, tc, vault_addr, vault, admin, op, user);
+    let spender = Address::generate(&e);
+    let shares = vault.deposit(&user, &1_000_0000000i128, &user);
+
+    let result = vault.try_burn_from(&spender, &user, &-1i128);
+
+    assert_eq!(result, Err(Ok(crate::errors::VaultError::InvalidDepositAmount)));
+    assert_eq!(vault.balance(&user), shares);
+    assert_eq!(vault.total_supply(), shares);
+}
+
+#[test]
+fn test_approve_refuses_a_negative_amount() {
+    setup!(e, token_addr, sac, tc, vault_addr, vault, admin, op, user);
+    let spender = Address::generate(&e);
+    let expiry = e.ledger().sequence() + 100;
+
+    let result = vault.try_approve(&user, &spender, &-1i128, &expiry);
+
+    assert_eq!(result, Err(Ok(crate::errors::VaultError::InvalidDepositAmount)));
+    assert_eq!(vault.allowance(&user, &spender), 0);
 }
 
 #[test]

@@ -293,10 +293,6 @@ pub fn set_decimals(e: &Env, decimals: u32) {
     e.storage().instance().set(&DataKey::Decimals, &decimals);
 }
 
-pub fn is_initialized(e: &Env) -> bool {
-    e.storage().instance().has(&DataKey::Admin)
-}
-
 // ---------------------------------------------------------------------------
 // Persistent storage helpers (balances & allowances)
 // ---------------------------------------------------------------------------

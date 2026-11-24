@@ -54,8 +54,10 @@ impl StrategyVaultContract {
     // Initialization
     // -----------------------------------------------------------------------
 
+    /// Set the roles and the config in the deployment transaction, so that no
+    /// other address can configure the vault first. The host runs this once.
     #[allow(clippy::too_many_arguments)]
-    pub fn initialize(
+    pub fn __constructor(
         e: Env,
         admin: Address,
         asset: Address,
@@ -65,9 +67,6 @@ impl StrategyVaultContract {
         decimals: u32,
         config: StrategyConfig,
     ) -> Result<(), VaultError> {
-        if storage::is_initialized(&e) {
-            return Err(VaultError::AlreadyInitialized);
-        }
         require_safe_asset_allowed(&config)?;
 
         storage::set_admin(&e, &admin);
@@ -151,6 +150,10 @@ impl StrategyVaultContract {
         storage::bump_instance(&e);
         from.require_auth();
 
+        if amount < 0 {
+            return Err(VaultError::InvalidDepositAmount);
+        }
+
         storage::set_allowance(&e, &from, &spender, amount, expiration_ledger);
         events::approve(&e, &from, &spender, amount, expiration_ledger);
         Ok(())
@@ -170,6 +173,11 @@ impl StrategyVaultContract {
     ) -> Result<(), VaultError> {
         storage::bump_instance(&e);
         spender.require_auth();
+
+        // A negative amount would reverse the transfer and debit `to`.
+        if amount < 0 {
+            return Err(VaultError::InvalidDepositAmount);
+        }
 
         let allowance_data = storage::get_allowance(&e, &from, &spender);
         if allowance_data.amount < amount {
@@ -213,6 +221,10 @@ impl StrategyVaultContract {
     ) -> Result<(), VaultError> {
         storage::bump_instance(&e);
         spender.require_auth();
+
+        if amount < 0 {
+            return Err(VaultError::InvalidDepositAmount);
+        }
 
         let allowance_data = storage::get_allowance(&e, &from, &spender);
         if allowance_data.amount < amount {
